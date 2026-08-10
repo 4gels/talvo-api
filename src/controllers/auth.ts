@@ -7,6 +7,63 @@ const prisma = new PrismaClient();
 const SECRET_KEY = process.env.SECRET_KEY || 'talvo-admin-secret-key-2026';
 
 export class AuthController {
+  // ✅ أضف هذه الدالة الجديدة
+  async registerSystemAdmin(req: Request, res: Response) {
+    try {
+      const { username, email, password, full_name } = req.body;
+
+      // ✅ التحقق من وجود المستخدم
+      const existing = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { username },
+            { email }
+          ]
+        }
+      });
+
+      if (existing) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'اسم المستخدم أو البريد الإلكتروني موجود بالفعل' 
+        });
+      }
+
+      // ✅ تشفير كلمة المرور
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // ✅ إنشاء المستخدم
+      const user = await prisma.user.create({
+        data: {
+          username,
+          email,
+          full_name,
+          password_hash: hashedPassword,
+          is_admin: true,
+          is_system_admin_flag: true,
+          is_active: true
+        }
+      });
+
+      res.json({
+        success: true,
+        message: 'تم إنشاء مدير النظام بنجاح',
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          full_name: user.full_name
+        }
+      });
+    } catch (error) {
+      console.error('Register error:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'فشل إنشاء المستخدم' 
+      });
+    }
+  }
+
   async login(req: Request, res: Response) {
     try {
       const { username, password } = req.body;
@@ -58,6 +115,7 @@ export class AuthController {
         }
       });
     } catch (error) {
+      console.error('Login error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }

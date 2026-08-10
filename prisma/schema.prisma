@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id                    Int      @id @default(autoincrement())
+  name                  String   @db.VarChar(100)
+  arabic_name           String?  @db.VarChar(100)
+  license_key           String   @unique @db.VarChar(64)
+  db_name               String   @unique @db.VarChar(100)
+  phone                 String?  @db.VarChar(20)
+  email                 String?  @db.VarChar(100)
+  address               String?  @db.Text
+  tax_number            String?  @db.VarChar(50)
+  commercial_register   String?  @db.VarChar(50)
+  currency              String   @default("EGP") @db.VarChar(3)
+  timezone              String   @default("Africa/Cairo") @db.VarChar(50)
+  is_active             Boolean  @default(true)
+  max_users             Int      @default(5)
+  max_storage_mb        Int      @default(100)
+  subscription_plan     String   @default("basic") @db.VarChar(20)
+  subscription_expiry   DateTime?
+  can_manage_products   Boolean  @default(true)
+  can_manage_sales      Boolean  @default(true)
+  can_manage_purchases  Boolean  @default(true)
+  can_manage_inventory  Boolean  @default(true)
+  can_manage_customers  Boolean  @default(true)
+  can_manage_suppliers  Boolean  @default(true)
+  can_manage_employees  Boolean  @default(true)
+  can_manage_reports    Boolean  @default(true)
+  can_manage_settings   Boolean  @default(false)
+  can_manage_backup     Boolean  @default(false)
+  can_export_data       Boolean  @default(false)
+  can_import_data       Boolean  @default(false)
+  can_manage_roles      Boolean  @default(false)
+  can_view_audit_log    Boolean  @default(false)
+  total_users           Int      @default(0)
+  total_storage_used_mb Int      @default(0)
+  last_activity         DateTime?
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  last_login            DateTime?
+  is_deleted            Boolean  @default(false)
+  
+  users User[]
+  activities ActivityLog[]
+}
+
+model User {
+  id                   Int      @id @default(autoincrement())
+  username             String   @unique @db.VarChar(50)
+  email                String   @unique @db.VarChar(100)
+  password_hash        String   @db.VarChar(200)
+  full_name            String   @db.VarChar(100)
+  is_active            Boolean  @default(true)
+  is_admin             Boolean  @default(false)
+  is_system_admin_flag Boolean  @default(false)
+  created_at           DateTime @default(now())
+  last_login           DateTime?
+  employee_id          Int?
+  role_id              Int?
+  tenant_id            Int?
+  is_deleted           Boolean  @default(false)
+  
+  tenant Tenant? @relation(fields: [tenant_id], references: [id])
+  activities ActivityLog[]
+}
+
+model ActivityLog {
+  id          Int      @id @default(autoincrement())
+  user_id     Int?
+  action      String   @db.VarChar(100)
+  module      String   @db.VarChar(50)
+  description String?  @db.Text
+  ip_address  String?  @db.VarChar(45)
+  user_agent  String?  @db.VarChar(200)
+  tenant_id   Int?
+  created_at  DateTime @default(now())
+  is_deleted  Boolean  @default(false)
+  
+  user User? @relation(fields: [user_id], references: [id])
+}

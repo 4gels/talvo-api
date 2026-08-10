@@ -84,4 +84,5 @@ model ActivityLog {
   is_deleted  Boolean  @default(false)
   
   user User? @relation(fields: [user_id], references: [id])
+  tenant Tenant? @relation(fields: [tenant_id], references: [id])  // ✅ هذا هو الحل
 }

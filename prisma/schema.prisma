@@ -7,6 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// =============================================
+// ✅ 1. جداول المستأجرين والمستخدمين الأساسية
+// =============================================
+
 model Tenant {
   id                    Int      @id @default(autoincrement())
   name                  String   @db.VarChar(100)
@@ -20,6 +24,7 @@ model Tenant {
   commercial_register   String?  @db.VarChar(50)
   currency              String   @default("EGP") @db.VarChar(3)
   timezone              String   @default("Africa/Cairo") @db.VarChar(50)
+  logo_path             String?  @db.VarChar(200)
   is_active             Boolean  @default(true)
   max_users             Int      @default(5)
   max_storage_mb        Int      @default(100)
@@ -45,10 +50,47 @@ model Tenant {
   created_at            DateTime @default(now())
   updated_at            DateTime @updatedAt
   last_login            DateTime?
+  sync_id               String   @unique @default(cuid())
   is_deleted            Boolean  @default(false)
-  
-  users User[]
-  activities ActivityLog[]
+  sync_status           String   @default("pending")
+  synced_at             DateTime?
+  sale_invoice_items SaleInvoiceItem[]
+  purchase_invoice_items PurchaseInvoiceItem[]
+
+  // ✅ العلاقات
+  users           User[]
+  roles           Role[]
+  permissions     Permission[]
+  employees       Employee[]
+  warehouses      Warehouse[]
+  categories      Category[]
+  products        Product[]
+  product_batches ProductBatch[]
+  suppliers       Supplier[]
+  customers       Customer[]
+  sale_invoices   SaleInvoice[]
+  purchase_invoices PurchaseInvoice[]
+  inventory_movements InventoryMovement[]
+  treasury_transactions TreasuryTransaction[]
+  settings        Setting[]
+  discount_tiers  DiscountTier[]
+  product_discount_tiers ProductDiscountTier[]
+  customer_discount_policies CustomerDiscountPolicy[]
+  customer_transactions CustomerTransaction[]
+  customer_bonuses CustomerBonus[]
+  companies       Company[]
+  company_payments CompanyPayment[]
+  company_purchase_histories CompanyPurchaseHistory[]
+  company_products CompanyProduct[]
+  purchase_requests PurchaseRequest[]
+  purchase_request_items PurchaseRequestItem[]
+  transaction_types TransactionType[]
+  activity_logs   ActivityLog[]
+  sales_returns   SalesReturn[]
+  sales_return_items SalesReturnItem[]
+  purchase_returns PurchaseReturn[]
+  purchase_return_items PurchaseReturnItem[]
+  // sync_queues, data_sync_queues, sync_conflicts تم إزالتها لأنها غير مرتبطة مباشرة بـ Tenant
 }
 
 model User {
@@ -62,13 +104,1136 @@ model User {
   is_system_admin_flag Boolean  @default(false)
   created_at           DateTime @default(now())
   last_login           DateTime?
-  employee_id          Int?
+  employee_id          Int?     @unique // ✅ تم إضافة unique لعلاقة واحد لواحد
   role_id              Int?
   tenant_id            Int?
+  sync_id              String  @unique @default(cuid())
+  is_deleted           Boolean @default(false)
+  sync_status          String  @default("pending")
+  synced_at            DateTime?
+  purchase_requests PurchaseRequest[]
+  customer_transactions CustomerTransaction[]
+  // ✅ العلاقات (تم إزالة أسماء العلاقات غير الضرورية لتجنب أخطاء الجانب المقابل)
+  tenant           Tenant?        @relation(fields: [tenant_id], references: [id])
+  role             Role?          @relation(fields: [role_id], references: [id])
+  employee         Employee?      @relation(fields: [employee_id], references: [id])
+  permissions      UserPermission[]
+  activities       ActivityLog[]
+  treasury_transactions TreasuryTransaction[]
+  created_products Product[]      @relation("CreatedProducts")
+  company_payments CompanyPayment[]
+  company_purchases CompanyPurchaseHistory[]
+  sale_invoices    SaleInvoice[] @relation("SaleInvoiceUser")
+  approved_sales   SaleInvoice[] @relation("SaleInvoiceApprover")
+  cancelled_sales  SaleInvoice[] @relation("SaleInvoiceCanceller")
+
+
+  purchase_invoices    PurchaseInvoice[] @relation("PurchaseInvoiceUser")
+  approved_purchases   PurchaseInvoice[] @relation("PurchaseInvoiceApprover")
+  cancelled_purchases  PurchaseInvoice[] @relation("PurchaseInvoiceCanceller")
+  authorized_purchases PurchaseInvoice[] @relation("PurchaseInvoiceAuthorizer")
+
+  sales_returns         SalesReturn[] @relation("SalesReturnUser")
+  approved_sales_returns SalesReturn[] @relation("SalesReturnApprover")
+  cancelled_sales_returns SalesReturn[] @relation("SalesReturnCanceller")
+
+  purchase_returns PurchaseReturn[]
+  inventory_movements InventoryMovement[] @relation("UserInventoryMovements")
+  resolved_conflicts SyncConflict[]      @relation("ResolvedConflicts")
+  approved_movements InventoryMovement[] @relation("ApproverMovements")
+  cancelled_movements InventoryMovement[] @relation("CancellerMovements")
+}
+
+model Role {
+  id          Int    @id @default(autoincrement())
+  name        String @unique @db.VarChar(50)
+  description String? @db.VarChar(200)
+  tenant_id   Int
+  sync_id     String @unique @default(cuid())
+  is_deleted  Boolean @default(false)
+  sync_status String @default("pending")
+  synced_at   DateTime?
+
+  // ✅ العلاقات
+  tenant      Tenant             @relation(fields: [tenant_id], references: [id])
+  users       User[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          Int    @id @default(autoincrement())
+  name        String @unique @db.VarChar(50)
+  description String? @db.VarChar(200)
+  tenant_id   Int
+  sync_id     String @unique @default(cuid())
+  is_deleted  Boolean @default(false)
+  sync_status String @default("pending")
+  synced_at   DateTime?
+
+  // ✅ العلاقات
+  tenant      Tenant             @relation(fields: [tenant_id], references: [id])
+  users       UserPermission[]
+  roles       RolePermission[]
+}
+
+// =============================================
+// ✅ جداول الربط (Many-to-Many)
+// =============================================
+
+model UserPermission {
+  user_id       Int
+  permission_id Int
+
+  user       User       @relation(fields: [user_id], references: [id])
+  permission Permission @relation(fields: [permission_id], references: [id])
+
+  @@id([user_id, permission_id])
+}
+
+model RolePermission {
+  role_id       Int
+  permission_id Int
+
+  role       Role       @relation(fields: [role_id], references: [id])
+  permission Permission @relation(fields: [permission_id], references: [id])
+
+  @@id([role_id, permission_id])
+}
+
+// =============================================
+// ✅ 2. جدول الموظفين
+// =============================================
+
+model Employee {
+  id                    Int      @id @default(autoincrement())
+  employee_id           String   @unique @db.VarChar(20)
+  full_name             String   @db.VarChar(100)
+  arabic_name           String?  @db.VarChar(100)
+  position              String?  @db.VarChar(50)
+  department            String?  @db.VarChar(50)
+  phone                 String?  @db.VarChar(20)
+  email                 String?  @db.VarChar(100)
+  hire_date             DateTime?
+  salary                Float?
+  address               String?  @db.Text
+  notes                 String?  @db.Text
+  is_active             Boolean  @default(true)
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  birth_date            DateTime?
+  gender                String?  @db.VarChar(10)
+  national_id           String?  @unique @db.VarChar(20)
+  social_insurance_number String? @unique @db.VarChar(30)
+  bank_account          String?  @db.VarChar(30)
+  iban                  String?  @db.VarChar(34)
+  tenant_id             Int
+  emergency_contact     String?  @db.VarChar(100)
+  emergency_phone       String?  @db.VarChar(20)
+  contract_type         String?  @db.VarChar(20)
+  contract_start_date   DateTime?
+  contract_end_date     DateTime?
+  vacation_balance      Float    @default(0)
+  sick_leave_balance    Float    @default(0)
+  performance_rating    Int      @default(3)
+  supervisor_id         Int?
+  company_id            Int?
+  sync_id               String   @unique @default(cuid())
+  is_deleted            Boolean  @default(false)
+  sync_status           String   @default("pending")
+  synced_at             DateTime?
+  treasury_transactions_employee TreasuryTransaction[] @relation("EmployeeTreasury")
+
+  // ✅ العلاقات (تم إزالة أسماء العلاقات غير الضرورية)
+  tenant            Tenant          @relation(fields: [tenant_id], references: [id])
+  company           Company?        @relation(fields: [company_id], references: [id])
+  supervisor        Employee?       @relation("Supervisor", fields: [supervisor_id], references: [id])
+  subordinates      Employee[]      @relation("Supervisor")
+  user              User?
+  responsible_products Product[]
+  responsible_suppliers Supplier[]
+  responsible_customers Customer[]
+  responsible_sales_returns SalesReturn[]
+  responsible_purchase_invoices PurchaseInvoice[]
+  responsible_sale_invoices SaleInvoice[]
+}
+
+// =============================================
+// ✅ 3. جداول المخازن والفئات والمنتجات
+// =============================================
+
+model Warehouse {
+  id          Int      @id @default(autoincrement())
+  name        String   @db.VarChar(50)
+  arabic_name String?  @db.VarChar(50)
+  code        String   @unique @db.VarChar(20)
+  address     String?  @db.Text
+  phone       String?  @db.VarChar(20)
+  manager     String?  @db.VarChar(100)
+  is_active   Boolean  @default(true)
+  is_default  Boolean  @default(false)
+  notes       String?  @db.Text
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  company_id  Int?
+  tenant_id   Int
+  sync_id     String  @unique @default(cuid())
+  is_deleted  Boolean @default(false)
+  sync_status String  @default("pending")
+  synced_at   DateTime?
+
+  // ✅ العلاقات
+  tenant          Tenant          @relation(fields: [tenant_id], references: [id])
+  company         Company?        @relation(fields: [company_id], references: [id])
+  products        Product[]       @relation("DefaultWarehouse")
+  batches         ProductBatch[]
+  sale_items      SaleInvoiceItem[]
+  purchase_items  PurchaseInvoiceItem[]
+  sales_return_items SalesReturnItem[]
+  inventory_movements_from InventoryMovement[] @relation("FromWarehouse")
+  inventory_movements_to InventoryMovement[] @relation("ToWarehouse")
+}
+
+model Category {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique @db.VarChar(50)
+  arabic_name String?  @db.VarChar(50)
+  parent_id   Int?
+  description String?  @db.Text
+  is_active   Boolean  @default(true)
+  company_id  Int?
+  tenant_id   Int
+  sync_id     String  @unique @default(cuid())
+  is_deleted  Boolean @default(false)
+  sync_status String  @default("pending")
+  synced_at   DateTime?
+
+  // ✅ العلاقات
+  tenant      Tenant    @relation(fields: [tenant_id], references: [id])
+  company     Company?  @relation(fields: [company_id], references: [id])
+  parent      Category? @relation("CategoryParent", fields: [parent_id], references: [id])
+  subcategories Category[] @relation("CategoryParent")
+  products    Product[]
+}
+
+model Product {
+  id                    Int      @id @default(autoincrement())
+  product_id            String   @unique @db.VarChar(20)
+  name                  String   @db.VarChar(100)
+  arabic_name           String?  @db.VarChar(100)
+  barcode               String?  @unique @db.VarChar(50)
+  serial_number         String?  @unique @db.VarChar(50)
+  image_path            String?  @db.VarChar(200)
+  image_url             String?  @db.VarChar(500)
+  storage_type          String   @default("local") @db.VarChar(20)
+  description           String?  @db.Text
+  category_id           Int?
+  supplier_id           Int?
+  track_batches         Boolean  @default(true)
+  default_shelf_life    Int?
+  quantity              Float    @default(0)
+  min_quantity          Float    @default(0)
+  max_quantity          Float    @default(0)
+  reorder_level         Float    @default(0)
+  tenant_id             Int
+  purchase_price        Float    @default(0)
+  sale_price_1          Float    @default(0)
+  sale_price_2          Float    @default(0)
+  sale_price_3          Float    @default(0)
+  unit                  String?  @db.VarChar(20)
+  is_active             Boolean  @default(true)
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  weight                Float    @default(0)
+  length                Float    @default(0)
+  width                 Float    @default(0)
+  height                Float    @default(0)
+  tax_rate              Float    @default(0)
+  tax_inclusive         Boolean  @default(false)
+  avg_cost              Float    @default(0)
+  last_price_update     DateTime?
+  manufacturer          String?  @db.VarChar(100)
+  model                 String?  @db.VarChar(50)
+  location              String?  @db.VarChar(100)
+  default_warehouse_id  Int?
+  company_id            Int?
+  responsible_employee_id Int?
+  price_retail          Float    @default(0)
+  price_wholesale       Float    @default(0)
+  price_contract        Float    @default(0)
+  use_tier_pricing      Boolean  @default(false)
+  has_discount          Boolean  @default(false)
+  discount_percent      Float    @default(0)
+  discount_fixed        Float    @default(0)
+  discount_type         String   @default("percentage") @db.VarChar(10)
+  product_discount_tier_id Int?
+  expected_profit_percent Float @default(0)
+  expected_profit_amount Float @default(0)
+  barcode_local         String?  @unique @db.VarChar(50)
+  barcode_international String?  @unique @db.VarChar(50)
+  thumbnail_path        String?  @db.VarChar(200)
+  box                   String?  @db.VarChar(50)
+  audience              String?  @db.VarChar(100)
+  promoter              String?  @db.VarChar(100)
+  packet                String?  @db.VarChar(50)
+  sale_price_rep        Float    @default(0)
+  sale_price_company    Float    @default(0)
+  has_offer             Boolean  @default(false)
+  offer_price           Float    @default(0)
+  offer_start_date      DateTime?
+  offer_end_date        DateTime?
+  offer_description     String?  @db.VarChar(200)
+  created_by            Int?
+  price_public          Float    @default(0)
+  sync_id               String   @unique @default(cuid())
+  is_deleted            Boolean  @default(false)
+  sync_status           String   @default("pending")
+  synced_at             DateTime?
+  sales_return_items SalesReturnItem[]
+  purchase_return_items PurchaseReturnItem[]
+
+
+
+  // ✅ العلاقات
+  tenant                Tenant          @relation(fields: [tenant_id], references: [id])
+  category              Category?       @relation(fields: [category_id], references: [id])
+  supplier              Supplier?       @relation(fields: [supplier_id], references: [id])
+  company               Company?        @relation(fields: [company_id], references: [id])
+  responsible_employee  Employee?       @relation(fields: [responsible_employee_id], references: [id])
+  default_warehouse     Warehouse?      @relation("DefaultWarehouse", fields: [default_warehouse_id], references: [id])
+  product_discount_tier ProductDiscountTier? @relation(fields: [product_discount_tier_id], references: [id])
+  creator               User?           @relation("CreatedProducts", fields: [created_by], references: [id])
+  batches               ProductBatch[]
+  sale_items            SaleInvoiceItem[]
+  purchase_items        PurchaseInvoiceItem[]
+  movements             InventoryMovement[]
+  company_supplies      CompanyProduct[]
+  sync_entries          SyncQueue[]
+}
+
+model ProductBatch {
+  id                   Int      @id @default(autoincrement())
+  product_id           Int
+  batch_number         String   @db.VarChar(50)
+  expiry_date          DateTime
+  quantity             Float
+  purchase_price       Float    @default(0)
+  sale_price_1         Float    @default(0)
+  sale_price_2         Float    @default(0)
+  sale_price_3         Float    @default(0)
+  supplier_id          Int?
+  purchase_invoice_id  Int?
+  is_active            Boolean  @default(true)
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+  tax_rate             Float    @default(0)
+  avg_cost             Float    @default(0)
+  notes                String?  @db.Text
+  tenant_id            Int
+  warehouse_id         Int?
+  company_id           Int?
+  sync_id              String   @unique @default(cuid())
   is_deleted           Boolean  @default(false)
-  
-  tenant Tenant? @relation(fields: [tenant_id], references: [id])
-  activities ActivityLog[]
+  sync_status          String   @default("pending")
+  synced_at            DateTime?
+
+  // ✅ العلاقات (تم إزالة أسماء العلاقات غير الضرورية)
+  product           Product           @relation(fields: [product_id], references: [id])
+  supplier          Supplier?         @relation(fields: [supplier_id], references: [id])
+  purchase_invoice  PurchaseInvoice?  @relation(fields: [purchase_invoice_id], references: [id])
+  tenant            Tenant            @relation(fields: [tenant_id], references: [id])
+  warehouse         Warehouse?        @relation(fields: [warehouse_id], references: [id])
+  company           Company?          @relation(fields: [company_id], references: [id])
+}
+
+model ProductDiscountTier {
+  id            Int      @id @default(autoincrement())
+  name          String   @db.VarChar(50)
+  arabic_name   String?  @db.VarChar(50)
+  min_quantity  Int      @default(0)
+  max_quantity  Int      @default(0)
+  tenant_id     Int
+  discount_type String   @default("percentage") @db.VarChar(10)
+  discount_value Float   @default(0)
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  company_id    Int?
+  sync_id       String   @unique @default(cuid())
+  is_deleted    Boolean  @default(false)
+  sync_status   String   @default("pending")
+  synced_at     DateTime?
+
+  // ✅ العلاقات
+  tenant  Tenant    @relation(fields: [tenant_id], references: [id])
+  company Company?  @relation(fields: [company_id], references: [id])
+  products Product[]
+}
+
+// =============================================
+// ✅ 4. جداول الموردين والعملاء والشركات
+// =============================================
+
+model Supplier {
+  id                     Int      @id @default(autoincrement())
+  supplier_id            String   @unique @db.VarChar(20)
+  name                   String   @db.VarChar(100)
+  arabic_name            String?  @db.VarChar(100)
+  contact_person         String?  @db.VarChar(100)
+  phone                  String?  @db.VarChar(20)
+  email                  String?  @db.VarChar(100)
+  address                String?  @db.Text
+  tax_number             String?  @db.VarChar(50)
+  balance                Float    @default(0)
+  notes                  String?  @db.Text
+  is_active              Boolean  @default(true)
+  created_at             DateTime @default(now())
+  company_id             Int?
+  responsible_employee_id Int?
+  tenant_id              Int
+  website                String?  @db.VarChar(200)
+  fax                    String?  @db.VarChar(20)
+  commercial_register    String?  @db.VarChar(50)
+  tax_card               String?  @db.VarChar(50)
+  bank_account           String?  @db.VarChar(50)
+  iban                   String?  @db.VarChar(34)
+  supplier_type          String   @default("local") @db.VarChar(20)
+  rating                 Int      @default(3)
+  total_purchases        Float    @default(0)
+  purchase_count         Int      @default(0)
+  last_purchase_date     DateTime?
+  default_payment_terms  Int      @default(30)
+  default_discount_percent Float @default(0)
+  tier                   String?  @db.VarChar(50)
+  is_vip                 Boolean  @default(false)
+  dealing_type           String   @default("retail") @db.VarChar(20)
+  discount_tier_id       Int?
+  use_tier_pricing       Boolean  @default(false)
+  sync_id                String   @unique @default(cuid())
+  is_deleted             Boolean  @default(false)
+  sync_status            String   @default("pending")
+  synced_at              DateTime?
+  best_purchase_requests PurchaseRequest[] @relation("BestSupplier")
+  best_purchase_request_items PurchaseRequestItem[] @relation("BestSupplierItem")
+  // ✅ العلاقات (تم إزالة أسماء العلاقات غير الضرورية)
+  tenant              Tenant    @relation(fields: [tenant_id], references: [id])
+  company             Company?  @relation(fields: [company_id], references: [id])
+  responsible_employee Employee? @relation(fields: [responsible_employee_id], references: [id])
+  discount_tier       DiscountTier? @relation(fields: [discount_tier_id], references: [id])
+  products            Product[]
+  product_batches     ProductBatch[]
+  purchase_invoices   PurchaseInvoice[]
+  returns             PurchaseReturn[]
+  inventory_movements InventoryMovement[]
+  treasury_transactions TreasuryTransaction[]
+}
+
+model Customer {
+  id                         Int      @id @default(autoincrement())
+  customer_id                String   @unique @db.VarChar(20)
+  name                       String   @db.VarChar(100)
+  arabic_name                String?  @db.VarChar(100)
+  phone                      String?  @db.VarChar(20)
+  email                      String?  @db.VarChar(100)
+  address                    String?  @db.Text
+  tax_number                 String?  @db.VarChar(50)
+  notes                      String?  @db.Text
+  is_active                  Boolean  @default(true)
+  created_at                 DateTime @default(now())
+  tenant_id                  Int
+  balance                    Float    @default(0)
+  credit_limit               Float    @default(0)
+  company_id                 Int?
+  responsible_employee_id    Int?
+  customer_type              String   @default("individual") @db.VarChar(20)
+  tier                       String?  @db.VarChar(50)
+  is_vip                     Boolean  @default(false)
+  is_new                     Boolean  @default(true)
+  dealing_type               String   @default("retail") @db.VarChar(20)
+  total_purchases            Float    @default(0)
+  purchase_count             Int      @default(0)
+  last_purchase_date         DateTime?
+  discount_tier_id           Int?
+  use_tier_pricing           Boolean  @default(false)
+  price_calculation_method   String   @default("wholesale") @db.VarChar(20)
+  custom_price_percentage    Float    @default(0)
+  payment_method             String   @default("cash") @db.VarChar(20)
+  payment_terms_days         Int      @default(0)
+  default_discount_percent   Float    @default(0)
+  default_discount_type      String   @default("percentage") @db.VarChar(10)
+  discount_policy_id         Int?
+  bonus_points               Int      @default(0)
+  bonus_balance              Float    @default(0)
+  internal_notes             String?  @db.Text
+  sync_id                    String   @unique @default(cuid())
+  is_deleted                 Boolean  @default(false)
+  sync_status                String   @default("pending")
+  synced_at                  DateTime?
+
+  // ✅ العلاقات
+  tenant              Tenant    @relation(fields: [tenant_id], references: [id])
+  company             Company?  @relation(fields: [company_id], references: [id])
+  responsible_employee Employee? @relation(fields: [responsible_employee_id], references: [id])
+  discount_tier       DiscountTier? @relation(fields: [discount_tier_id], references: [id])
+  discount_policy     CustomerDiscountPolicy? @relation(fields: [discount_policy_id], references: [id])
+  sales               SaleInvoice[]
+  returns             SalesReturn[]
+  transactions        CustomerTransaction[]
+  bonuses             CustomerBonus[]
+  inventory_movements InventoryMovement[]
+  treasury_transactions TreasuryTransaction[]
+}
+
+model DiscountTier {
+  id                    Int      @id @default(autoincrement())
+  name                  String   @db.VarChar(50)
+  arabic_name           String?  @db.VarChar(50)
+  description           String?  @db.Text
+  tenant_id             Int
+  min_purchases         Float    @default(0)
+  max_purchases         Float    @default(0)
+  min_quantity          Int      @default(0)
+  max_quantity          Int      @default(0)
+  discount_type         String   @default("percentage") @db.VarChar(10)
+  discount_value        Float    @default(0)
+  auto_update           Boolean  @default(true)
+  dealing_type          String   @default("retail") @db.VarChar(20)
+  is_vip                Boolean  @default(false)
+  apply_to_all_products Boolean  @default(true)
+  product_ids           String?  @db.Text
+  priority              Int      @default(0)
+  is_active             Boolean  @default(true)
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  company_id            Int?
+  sync_id               String   @unique @default(cuid())
+  is_deleted            Boolean  @default(false)
+  sync_status           String   @default("pending")
+  synced_at             DateTime?
+
+  // ✅ العلاقات
+  tenant    Tenant    @relation(fields: [tenant_id], references: [id])
+  company   Company?  @relation(fields: [company_id], references: [id])
+  customers Customer[]
+  suppliers Supplier[]
+  invoices  SaleInvoice[]
+}
+
+model CustomerBonus {
+  id           Int      @id @default(autoincrement())
+  customer_id  Int
+  bonus_type   String   @db.VarChar(20)
+  bonus_value  Float    @default(0)
+  description  String?  @db.VarChar(200)
+  expiry_date  DateTime?
+  is_used      Boolean  @default(false)
+  used_at      DateTime?
+  tenant_id    Int
+  source_type  String?  @db.VarChar(20)
+  source_id    Int?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  sync_id      String   @unique @default(cuid())
+  is_deleted   Boolean  @default(false)
+  sync_status  String   @default("pending")
+  synced_at    DateTime?
+
+  // ✅ العلاقات
+  customer Customer @relation(fields: [customer_id], references: [id])
+  tenant   Tenant   @relation(fields: [tenant_id], references: [id])
+}
+
+model Company {
+  id                      Int      @id @default(autoincrement())
+  company_id              String   @unique @db.VarChar(20)
+  name                    String   @db.VarChar(100)
+  arabic_name             String?  @db.VarChar(100)
+  phone                   String?  @db.VarChar(20)
+  email                   String?  @db.VarChar(100)
+  address                 String?  @db.Text
+  tax_number              String?  @db.VarChar(50)
+  commercial_register     String?  @db.VarChar(50)
+  notes                   String?  @db.Text
+  is_active               Boolean  @default(true)
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+  tenant_id               Int
+  balance                 Float    @default(0)
+  currency                String   @default("EGP") @db.VarChar(3)
+  default_payment_terms   Int      @default(30)
+  credit_limit            Float    @default(0)
+  default_discount_percent Float   @default(0)
+  default_payment_type    String   @default("both") @db.VarChar(20)
+  inventory_turnover_days Int      @default(30)
+  rating                  Int      @default(3)
+  last_purchase_date      DateTime?
+  total_purchases         Float    @default(0)
+  total_payments          Float    @default(0)
+  sync_id                 String   @unique @default(cuid())
+  is_deleted              Boolean  @default(false)
+  sync_status             String   @default("pending")
+  synced_at               DateTime?
+
+  // ✅ العلاقات
+  tenant               Tenant                @relation(fields: [tenant_id], references: [id])
+  employees            Employee[]
+  warehouses           Warehouse[]
+  categories           Category[]
+  products             Product[]
+  suppliers            Supplier[]
+  customers            Customer[]
+  discount_tiers       DiscountTier[]
+  product_discount_tiers ProductDiscountTier[]
+  customer_discount_policies CustomerDiscountPolicy[]
+  sales_invoices       SaleInvoice[]
+  purchase_invoices    PurchaseInvoice[]
+  purchase_requests    PurchaseRequest[]
+  payments             CompanyPayment[]
+  purchase_history     CompanyPurchaseHistory[]
+  products_supplied    CompanyProduct[]
+  sales_returns        SalesReturn[]
+  inventory_movements  InventoryMovement[]
+  product_batches      ProductBatch[]
+}
+
+model CompanyPayment {
+  id              Int      @id @default(autoincrement())
+  company_id      Int
+  payment_number  String   @unique @db.VarChar(20)
+  payment_date    DateTime @default(now())
+  amount          Float
+  payment_type    String?  @db.VarChar(20)
+  reference_number String? @db.VarChar(50)
+  notes           String?  @db.Text
+  user_id         Int?
+  created_at      DateTime @default(now())
+  tenant_id       Int
+  sync_id         String   @unique @default(cuid())
+  is_deleted      Boolean  @default(false)
+  sync_status     String   @default("pending")
+  synced_at       DateTime?
+
+  // ✅ العلاقات
+  company Company @relation(fields: [company_id], references: [id])
+  user    User?   @relation(fields: [user_id], references: [id])
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id])
+}
+
+model CompanyPurchaseHistory {
+  id              Int      @id @default(autoincrement())
+  company_id      Int
+  purchase_date   DateTime @default(now())
+  invoice_number  String?  @db.VarChar(50)
+  total_amount    Float
+  discount_amount Float    @default(0)
+  net_amount      Float
+  paid_amount     Float    @default(0)
+  remaining_amount Float   @default(0)
+  payment_terms   Int      @default(30)
+  due_date        DateTime?
+  status          String   @default("pending") @db.VarChar(20)
+  notes           String?  @db.Text
+  user_id         Int?
+  created_at      DateTime @default(now())
+  tenant_id       Int
+  sync_id         String   @unique @default(cuid())
+  is_deleted      Boolean  @default(false)
+  sync_status     String   @default("pending")
+  synced_at       DateTime?
+
+  // ✅ العلاقات
+  company Company @relation(fields: [company_id], references: [id])
+  user    User?   @relation(fields: [user_id], references: [id])
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id])
+}
+
+model CompanyProduct {
+  id                    Int      @id @default(autoincrement())
+  company_id            Int
+  product_id            Int
+  purchase_price        Float    @default(0)
+  tenant_id             Int
+  last_purchase_price   Float    @default(0)
+  total_quantity_purchased Float @default(0)
+  last_purchase_date    DateTime?
+  is_external           Boolean  @default(false)
+  external_product_name String?  @db.VarChar(200)
+  external_product_id   String?  @db.VarChar(50)
+  external_barcode      String?  @db.VarChar(50)
+  avg_storage_days      Int      @default(0)
+  expected_profit_percent Float @default(0)
+  performance_rating    String   @default("pending") @db.VarChar(20)
+  notes                 String?  @db.Text
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  sync_id               String   @unique @default(cuid())
+  is_deleted            Boolean  @default(false)
+  sync_status           String   @default("pending")
+  synced_at             DateTime?
+
+  // ✅ العلاقات
+  company Company @relation(fields: [company_id], references: [id])
+  product Product @relation(fields: [product_id], references: [id])
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id])
+  purchase_requests PurchaseRequestItem[]
+}
+
+// =============================================
+// ✅ 5. جداول الفواتير والمشتريات والمبيعات
+// =============================================
+
+model SaleInvoice {
+  id                    Int      @id @default(autoincrement())
+  invoice_number        String   @unique @db.VarChar(20)
+  invoice_date          DateTime @default(now())
+  customer_id           Int?
+  user_id               Int?
+  subtotal              Float    @default(0)
+  discount              Float    @default(0)
+  tax                   Float    @default(0)
+  total                 Float    @default(0)
+  paid                  Float    @default(0)
+  remaining             Float    @default(0)
+  tenant_id             Int
+  status                String   @default("pending") @db.VarChar(20)
+  payment_type          String?  @db.VarChar(20)
+  notes                 String?  @db.Text
+  created_at            DateTime @default(now())
+  merged_into_id        Int?
+  invoice_type          String   @default("sales") @db.VarChar(20)
+  delivery_date         DateTime?
+  payment_due_date      DateTime?
+  payment_terms         String?  @db.VarChar(50)
+  shipping_address      String?  @db.Text
+  billing_address       String?  @db.Text
+  shipping_method       String?  @db.VarChar(50)
+  tracking_number       String?  @db.VarChar(50)
+  currency              String   @default("EGP") @db.VarChar(3)
+  exchange_rate         Float    @default(1)
+  approved_by           Int?
+  approved_at           DateTime?
+  cancelled_by          Int?
+  cancelled_at          DateTime?
+  cancellation_reason   String?  @db.Text
+  discount_tier_id      Int?
+  bonus_applied         Float    @default(0)
+  bonus_points_earned   Int      @default(0)
+  total_profit          Float    @default(0)
+  total_cost            Float    @default(0)
+  company_id            Int?
+  tax_rate              Float    @default(0)
+  discount_type         String   @default("fixed") @db.VarChar(10)
+  responsible_employee_id Int?
+  due_date              DateTime?
+  sync_id               String   @unique @default(cuid())
+  is_deleted            Boolean  @default(false)
+  sync_status           String   @default("pending")
+  synced_at             DateTime?
+
+  // ✅ العلاقات (تم إزالة أسماء العلاقات غير الضرورية)
+  customer           Customer?         @relation(fields: [customer_id], references: [id])
+  user               User?             @relation("SaleInvoiceUser", fields: [user_id], references: [id])
+  approver           User?             @relation("SaleInvoiceApprover", fields: [approved_by], references: [id])
+  canceller          User?             @relation("SaleInvoiceCanceller", fields: [cancelled_by], references: [id])
+  tenant             Tenant            @relation(fields: [tenant_id], references: [id])
+  discount_tier      DiscountTier?     @relation(fields: [discount_tier_id], references: [id])
+  company            Company?          @relation(fields: [company_id], references: [id])
+  responsible_employee Employee?       @relation(fields: [responsible_employee_id], references: [id])
+  items              SaleInvoiceItem[]
+  returns            SalesReturn[]
+  treasury_transactions TreasuryTransaction[]
+}
+
+model SaleInvoiceItem {
+  id                      Int      @id @default(autoincrement())
+  invoice_id              Int
+  product_id              Int
+  batch_id                Int?
+  quantity                Float    @default(0)
+  unit_price              Float    @default(0)
+  discount                Float    @default(0)
+  total                   Float    @default(0)
+  tenant_id               Int
+  batch_number            String?  @db.VarChar(50)
+  expiry_date             DateTime?
+  tax_amount              Float    @default(0)
+  discount_percentage     Float    @default(0)
+  total_before_tax        Float    @default(0)
+  total_after_tax         Float    @default(0)
+  warehouse_id            Int?
+  return_quantity         Float    @default(0)
+  cost_price              Float    @default(0)
+  profit_amount           Float    @default(0)
+  profit_percent          Float    @default(0)
+  price_type_used         String   @default("retail") @db.VarChar(20)
+  customer_discount_amount Float   @default(0)
+  tier_discount_amount    Float    @default(0)
+  product_discount_amount Float    @default(0)
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+  price_before_discount   Float    @default(0)
+  discount_rate           Float    @default(0)
+  item_notes              String?  @db.Text
+  sync_id                 String   @unique @default(cuid())
+  is_deleted              Boolean  @default(false)
+  sync_status             String   @default("pending")
+  synced_at               DateTime?
+
+  // ✅ العلاقات
+  invoice   SaleInvoice @relation(fields: [invoice_id], references: [id])
+  product   Product     @relation(fields: [product_id], references: [id])
+  tenant    Tenant      @relation(fields: [tenant_id], references: [id])
+  warehouse Warehouse?  @relation(fields: [warehouse_id], references: [id])
+}
+
+model PurchaseInvoice {
+  id                    Int      @id @default(autoincrement())
+  invoice_number        String   @unique @db.VarChar(20)
+  invoice_date          DateTime @default(now())
+  supplier_id           Int?
+  user_id               Int?
+  subtotal              Float    @default(0)
+  discount              Float    @default(0)
+  tax                   Float    @default(0)
+  total                 Float    @default(0)
+  paid                  Float    @default(0)
+  remaining             Float    @default(0)
+  tenant_id             Int
+  status                String   @default("pending") @db.VarChar(20)
+  payment_type          String?  @db.VarChar(20)
+  notes                 String?  @db.Text
+  created_at            DateTime @default(now())
+  profit_margin         Float    @default(0)
+  invoice_type          String   @default("purchase") @db.VarChar(20)
+  delivery_date         DateTime?
+  payment_due_date      DateTime?
+  payment_terms         String?  @db.VarChar(50)
+  shipping_address      String?  @db.Text
+  billing_address       String?  @db.Text
+  shipping_method       String?  @db.VarChar(50)
+  tracking_number       String?  @db.VarChar(50)
+  currency              String   @default("EGP") @db.VarChar(3)
+  exchange_rate         Float    @default(1)
+  approved_by           Int?
+  approved_at           DateTime?
+  cancelled_by          Int?
+  cancelled_at          DateTime?
+  cancellation_reason   String?  @db.Text
+  company_id            Int?
+  tax_rate              Float    @default(0)
+  discount_type         String   @default("fixed") @db.VarChar(10)
+  responsible_employee_id Int?
+  due_date              DateTime?
+  po_number             String?  @db.VarChar(50)
+  expected_delivery_date DateTime?
+  delivery_terms        String?  @db.VarChar(200)
+  payment_terms_text    String?  @db.Text
+  authorized_by         Int?
+  authorized_at         DateTime?
+  total_cost            Float    @default(0)
+  expected_profit       Float    @default(0)
+  sync_id               String   @unique @default(cuid())
+  is_deleted            Boolean  @default(false)
+  sync_status           String   @default("pending")
+  synced_at             DateTime?
+
+  // ✅ العلاقات
+  supplier           Supplier?         @relation(fields: [supplier_id], references: [id])
+  user               User?             @relation("PurchaseInvoiceUser", fields: [user_id], references: [id])
+  approver           User?             @relation("PurchaseInvoiceApprover", fields: [approved_by], references: [id])
+  canceller          User?             @relation("PurchaseInvoiceCanceller", fields: [cancelled_by], references: [id])
+  authorizer         User?             @relation("PurchaseInvoiceAuthorizer", fields: [authorized_by], references: [id])
+  tenant             Tenant            @relation(fields: [tenant_id], references: [id])
+  company            Company?          @relation(fields: [company_id], references: [id])
+  responsible_employee Employee?       @relation(fields: [responsible_employee_id], references: [id])
+  items              PurchaseInvoiceItem[]
+  batches            ProductBatch[]
+  returns            PurchaseReturn[]
+  treasury_transactions TreasuryTransaction[]
+}
+
+model PurchaseInvoiceItem {
+  id                    Int      @id @default(autoincrement())
+  invoice_id            Int
+  product_id            Int
+  quantity              Float    @default(0)
+  unit_price            Float    @default(0)
+  discount              Float    @default(0)
+  total                 Float    @default(0)
+  tenant_id             Int
+  tax_amount            Float    @default(0)
+  discount_percentage   Float    @default(0)
+  total_before_tax      Float    @default(0)
+  total_after_tax       Float    @default(0)
+  warehouse_id          Int?
+  return_quantity       Float    @default(0)
+  cost_price            Float    @default(0)
+  expected_profit       Float    @default(0)
+  expected_profit_percent Float @default(0)
+  item_notes            String?  @db.Text
+  quality_status        String   @default("pending") @db.VarChar(20)
+  received_quantity     Float    @default(0)
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  sync_id               String   @unique @default(cuid())
+  is_deleted            Boolean  @default(false)
+  sync_status           String   @default("pending")
+  synced_at             DateTime?
+
+  // ✅ العلاقات
+  invoice   PurchaseInvoice @relation(fields: [invoice_id], references: [id])
+  product   Product         @relation(fields: [product_id], references: [id])
+  tenant    Tenant          @relation(fields: [tenant_id], references: [id])
+  warehouse Warehouse?      @relation(fields: [warehouse_id], references: [id])
+}
+
+// =============================================
+// ✅ 6. جداول المرتجعات والحركات
+// =============================================
+
+model SalesReturn {
+  id                    Int      @id @default(autoincrement())
+  return_number         String   @unique @db.VarChar(20)
+  invoice_id            Int?
+  customer_id           Int?
+  return_date           DateTime @default(now())
+  reason                String?  @db.VarChar(200)
+  notes                 String?  @db.Text
+  total_amount          Float    @default(0)
+  status                String   @default("pending") @db.VarChar(20)
+  user_id               Int?
+  created_at            DateTime @default(now())
+  tenant_id             Int
+  approved_by           Int?
+  approved_at           DateTime?
+  cancelled_by          Int?
+  cancelled_at          DateTime?
+  cancellation_reason   String?  @db.Text
+  company_id            Int?
+  return_type           String   @default("partial") @db.VarChar(20)
+  responsible_employee_id Int?
+  sync_id               String   @unique @default(cuid())
+  is_deleted            Boolean  @default(false)
+  sync_status           String   @default("pending")
+  synced_at             DateTime?
+
+  // ✅ العلاقات
+  invoice           SaleInvoice?      @relation(fields: [invoice_id], references: [id])
+  customer          Customer?         @relation(fields: [customer_id], references: [id])
+  user              User?             @relation("SalesReturnUser", fields: [user_id], references: [id])
+  approver          User?             @relation("SalesReturnApprover", fields: [approved_by], references: [id])
+  canceller         User?             @relation("SalesReturnCanceller", fields: [cancelled_by], references: [id])
+
+  tenant            Tenant            @relation(fields: [tenant_id], references: [id])
+  company           Company?          @relation(fields: [company_id], references: [id])
+  responsible_employee Employee?       @relation(fields: [responsible_employee_id], references: [id])
+  items             SalesReturnItem[]
+  treasury_transactions TreasuryTransaction[]
+}
+
+model SalesReturnItem {
+  id          Int      @id @default(autoincrement())
+  return_id   Int
+  product_id  Int
+  batch_id    Int?
+  quantity    Float    @default(0)
+  unit_price  Float    @default(0)
+  total       Float    @default(0)
+  reason      String?  @db.VarChar(200)
+  tenant_id   Int
+  batch_number String? @db.VarChar(50)
+  expiry_date DateTime?
+  warehouse_id Int?
+  condition   String   @default("good") @db.VarChar(20)
+  sync_id     String   @unique @default(cuid())
+  is_deleted  Boolean  @default(false)
+  sync_status String   @default("pending")
+  synced_at   DateTime?
+
+  // ✅ العلاقات
+  return    SalesReturn @relation(fields: [return_id], references: [id])
+  product   Product     @relation(fields: [product_id], references: [id])
+  tenant    Tenant      @relation(fields: [tenant_id], references: [id])
+  warehouse Warehouse?  @relation(fields: [warehouse_id], references: [id])
+}
+
+model PurchaseReturn {
+  id                    Int      @id @default(autoincrement())
+  return_number         String   @unique @db.VarChar(20)
+  invoice_id            Int?
+  supplier_id           Int?
+  return_date           DateTime @default(now())
+  reason                String?  @db.VarChar(200)
+  notes                 String?  @db.Text
+  total_amount          Float    @default(0)
+  status                String   @default("pending") @db.VarChar(20)
+  user_id               Int?
+  created_at            DateTime @default(now())
+  tenant_id             Int
+  sync_id               String   @unique @default(cuid())
+  is_deleted            Boolean  @default(false)
+  sync_status           String   @default("pending")
+  synced_at             DateTime?
+
+  // ✅ العلاقات
+  invoice PurchaseInvoice? @relation(fields: [invoice_id], references: [id])
+  supplier Supplier?       @relation(fields: [supplier_id], references: [id])
+  user     User?           @relation(fields: [user_id], references: [id])
+  tenant   Tenant          @relation(fields: [tenant_id], references: [id])
+  items    PurchaseReturnItem[]
+  treasury_transactions TreasuryTransaction[]
+}
+
+model PurchaseReturnItem {
+  id          Int      @id @default(autoincrement())
+  return_id   Int
+  product_id  Int
+  batch_id    Int?
+  quantity    Float    @default(0)
+  unit_price  Float    @default(0)
+  total       Float    @default(0)
+  tenant_id   Int
+  reason      String?  @db.VarChar(200)
+  sync_id     String   @unique @default(cuid())
+  is_deleted  Boolean  @default(false)
+  sync_status String   @default("pending")
+  synced_at   DateTime?
+
+  // ✅ العلاقات
+  return  PurchaseReturn @relation(fields: [return_id], references: [id])
+  product Product       @relation(fields: [product_id], references: [id])
+  tenant  Tenant        @relation(fields: [tenant_id], references: [id])
+}
+
+model InventoryMovement {
+  id                  Int      @id @default(autoincrement())
+  product_id          Int
+  batch_id            Int?
+  movement_type       String   @db.VarChar(30)
+  tenant_id           Int
+  reference_type      String?  @db.VarChar(30)
+  reference_id        Int?
+  reference_number    String?  @db.VarChar(50)
+  quantity            Float
+  unit_price          Float    @default(0)
+  total_value         Float    @default(0)
+  cost_price          Float    @default(0)
+  profit_amount       Float    @default(0)
+  profit_percent      Float    @default(0)
+  batch_number        String?  @db.VarChar(50)
+  expiry_date         DateTime?
+  from_warehouse_id   Int?
+  to_warehouse_id     Int?
+  source_warehouse_id Int?
+  dest_warehouse_id   Int?
+  adjustment_reason   String?  @db.VarChar(200)
+  old_quantity        Float    @default(0)
+  new_quantity        Float    @default(0)
+  status              String   @default("completed") @db.VarChar(20)
+  approved_by         Int?
+  approved_at         DateTime?
+  cancelled_by        Int?
+  cancelled_at        DateTime?
+  cancellation_reason String?  @db.Text
+  customer_id         Int?
+  supplier_id         Int?
+  company_id          Int?
+  movement_date       DateTime @default(now())
+  notes               String?  @db.Text
+  user_id             Int?
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+  sync_id             String   @unique @default(cuid())
+  is_deleted          Boolean  @default(false)
+  sync_status         String   @default("pending")
+  synced_at           DateTime?
+
+  // ✅ العلاقات
+  product         Product          @relation(fields: [product_id], references: [id])
+  user            User?            @relation("UserInventoryMovements", fields: [user_id], references: [id])
+  approver        User?            @relation("ApproverMovements", fields: [approved_by], references: [id])
+  canceller       User?            @relation("CancellerMovements", fields: [cancelled_by], references: [id])
+  tenant          Tenant           @relation(fields: [tenant_id], references: [id])
+  from_warehouse  Warehouse?       @relation("FromWarehouse", fields: [from_warehouse_id], references: [id])
+  to_warehouse    Warehouse?       @relation("ToWarehouse", fields: [to_warehouse_id], references: [id])
+  customer        Customer?        @relation(fields: [customer_id], references: [id])
+  supplier        Supplier?        @relation(fields: [supplier_id], references: [id])
+  company         Company?         @relation(fields: [company_id], references: [id])
+}
+
+// =============================================
+// ✅ 7. جداول الطلبات والأنشطة والإعدادات
+// =============================================
+
+model PurchaseRequest {
+  id                   Int      @id @default(autoincrement())
+  request_number       String   @unique @db.VarChar(20)
+  company_id           Int
+  tenant_id            Int
+  request_date         DateTime @default(now())
+  notes                String?  @db.Text
+  status               String   @default("pending") @db.VarChar(20)
+  price_comparison_done Boolean @default(false)
+  best_price           Float    @default(0)
+  best_supplier_id     Int?
+  user_id              Int?
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+  sync_id              String   @unique @default(cuid())
+  is_deleted           Boolean  @default(false)
+  sync_status          String   @default("pending")
+  synced_at            DateTime?
+  best_supplier Supplier? @relation("BestSupplier", fields: [best_supplier_id], references: [id])
+  // ✅ العلاقات
+  company       Company     @relation(fields: [company_id], references: [id])
+  tenant        Tenant      @relation(fields: [tenant_id], references: [id])
+  user          User?       @relation(fields: [user_id], references: [id])
+  items         PurchaseRequestItem[]
+}
+
+model PurchaseRequestItem {
+  id                Int      @id @default(autoincrement())
+  request_id        Int
+  company_product_id Int
+  tenant_id         Int
+  quantity          Float    @default(1)
+  suggested_price   Float    @default(0)
+  competitor_prices Json?    // سيتم تخزينه كـ JSON
+  best_price        Float    @default(0)
+  best_supplier_id  Int?
+  notes             String?  @db.Text
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  sync_id           String   @unique @default(cuid())
+  is_deleted        Boolean  @default(false)
+  sync_status       String   @default("pending")
+  synced_at         DateTime?
+  best_supplier Supplier? @relation("BestSupplierItem", fields: [best_supplier_id], references: [id])
+  // ✅ العلاقات
+  request       PurchaseRequest @relation(fields: [request_id], references: [id])
+  company_product CompanyProduct @relation(fields: [company_product_id], references: [id])
+  tenant        Tenant          @relation(fields: [tenant_id], references: [id])
+}
+
+model TransactionType {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique @db.VarChar(50)
+  arabic_name String   @db.VarChar(50)
+  icon        String   @default("📌") @db.VarChar(20)
+  color       String   @default("secondary") @db.VarChar(20)
+  is_active   Boolean  @default(true)
+  is_collection Boolean @default(false)
+  is_refund   Boolean  @default(false)
+  priority    Int      @default(0)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  tenant_id   Int
+  sync_id     String   @unique @default(cuid())
+  is_deleted  Boolean  @default(false)
+  sync_status String   @default("pending")
+  synced_at   DateTime?
+
+  // ✅ العلاقات
+  tenant Tenant @relation(fields: [tenant_id], references: [id])
 }
 
 model ActivityLog {
@@ -79,10 +1244,186 @@ model ActivityLog {
   description String?  @db.Text
   ip_address  String?  @db.VarChar(45)
   user_agent  String?  @db.VarChar(200)
-  tenant_id   Int?
   created_at  DateTime @default(now())
+  tenant_id   Int?
+  sync_id     String   @unique @default(cuid())
   is_deleted  Boolean  @default(false)
-  
-  user User? @relation(fields: [user_id], references: [id])
-  tenant Tenant? @relation(fields: [tenant_id], references: [id])  // ✅ هذا هو الحل
+  sync_status String   @default("pending")
+  synced_at   DateTime?
+
+  // ✅ العلاقات
+  user   User?   @relation(fields: [user_id], references: [id])
+  tenant Tenant? @relation(fields: [tenant_id], references: [id])
+}
+
+model Setting {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique @db.VarChar(100)
+  value       String?  @db.Text
+  group_name  String   @default("general") @db.VarChar(50)
+  is_public   Boolean  @default(false)
+  is_encrypted Boolean @default(false)
+  description String?  @db.VarChar(200)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  tenant_id   Int?
+  sync_id     String   @unique @default(cuid())
+  is_deleted  Boolean  @default(false)
+  sync_status String   @default("pending")
+  synced_at   DateTime?
+
+  // ✅ العلاقات
+  tenant Tenant? @relation(fields: [tenant_id], references: [id])
+}
+
+model CustomerTransaction {
+  id                Int      @id @default(autoincrement())
+  customer_id       Int
+  tenant_id         Int
+  transaction_type  String   @db.VarChar(20)
+  amount            Float
+  balance_before    Float
+  balance_after     Float
+  reference_type    String?  @db.VarChar(20)
+  reference_id      Int?
+  description       String?  @db.VarChar(200)
+  transaction_date  DateTime @default(now())
+  user_id           Int?
+  sync_id           String   @unique @default(cuid())
+  is_deleted        Boolean  @default(false)
+  sync_status       String   @default("pending")
+  synced_at         DateTime?
+
+  // ✅ العلاقات
+  customer Customer @relation(fields: [customer_id], references: [id])
+  tenant   Tenant   @relation(fields: [tenant_id], references: [id])
+  user     User?    @relation(fields: [user_id], references: [id])
+}
+
+model CustomerDiscountPolicy {
+  id            Int      @id @default(autoincrement())
+  name          String   @db.VarChar(50)
+  description   String?  @db.Text
+  min_purchases Float    @default(0)
+  min_quantity  Int      @default(0)
+  customer_tier String?  @db.VarChar(20)
+  tenant_id     Int
+  discount_type String   @default("percentage") @db.VarChar(10)
+  discount_value Float   @default(0)
+  apply_to_all  Boolean  @default(true)
+  category_ids  String?  @db.Text
+  product_ids   String?  @db.Text
+  start_date    DateTime?
+  end_date      DateTime?
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  company_id    Int?
+  sync_id       String   @unique @default(cuid())
+  is_deleted    Boolean  @default(false)
+  sync_status   String   @default("pending")
+  synced_at     DateTime?
+
+  // ✅ العلاقات
+  tenant  Tenant    @relation(fields: [tenant_id], references: [id])
+  company Company?  @relation(fields: [company_id], references: [id])
+  customers Customer[]
+}
+
+model TreasuryTransaction {
+  id                    Int      @id @default(autoincrement())
+  tenant_id             Int
+  party_type            String   @db.VarChar(20)
+  party_id              Int?
+  transaction_type      String   @db.VarChar(30)
+  amount                Float
+  treasury_balance_before Float @default(0)
+  treasury_balance_after Float @default(0)
+  party_balance_before  Float    @default(0)
+  party_balance_after   Float    @default(0)
+  reference_type        String?  @db.VarChar(30)
+  reference_id          Int?
+  description           String?  @db.Text
+  transaction_date      DateTime @default(now())
+  user_id               Int?
+  sync_id               String   @unique @default(cuid())
+  is_deleted            Boolean  @default(false)
+  sync_status           String   @default("pending")
+  synced_at             DateTime?
+  employee Employee? @relation("EmployeeTreasury", fields: [party_id], references: [id], map: "TreasuryTransaction_party_id_employee_fkey")
+
+
+  // ✅ العلاقات (مع أسماء فريدة للمفاتيح الأجنبية)
+  tenant          Tenant        @relation(fields: [tenant_id], references: [id])
+  user            User?         @relation(fields: [user_id], references: [id])
+  customer        Customer?     @relation(fields: [party_id], references: [id], map: "TreasuryTransaction_party_id_customer_fkey")
+  supplier        Supplier?     @relation(fields: [party_id], references: [id], map: "TreasuryTransaction_party_id_supplier_fkey")
+  sale_invoice    SaleInvoice?  @relation(fields: [reference_id], references: [id], map: "TreasuryTransaction_reference_id_sale_invoice_fkey")
+  purchase_invoice PurchaseInvoice? @relation(fields: [reference_id], references: [id], map: "TreasuryTransaction_reference_id_purchase_invoice_fkey")
+  sales_return    SalesReturn?  @relation(fields: [reference_id], references: [id], map: "TreasuryTransaction_reference_id_sales_return_fkey")
+  purchase_return PurchaseReturn? @relation(fields: [reference_id], references: [id], map: "TreasuryTransaction_reference_id_purchase_return_fkey")
+}
+
+// =============================================
+// ✅ 8. جداول المزامنة (بدون علاقات مباشرة مع Tenant)
+// =============================================
+
+model SyncQueue {
+  id          Int      @id @default(autoincrement())
+  product_id  Int
+  local_path  String   @db.VarChar(500)
+  public_id   String?  @db.VarChar(200)
+  status      String   @default("pending") @db.VarChar(20)
+  retry_count Int      @default(0)
+  error_message String? @db.Text
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  sync_id     String   @unique @default(cuid())
+  is_deleted  Boolean  @default(false)
+  sync_status String   @default("pending")
+  synced_at   DateTime?
+
+  // ✅ العلاقات
+  product Product @relation(fields: [product_id], references: [id])
+}
+
+model DataSyncQueue {
+  id            Int      @id @default(autoincrement())
+  table_name    String   @db.VarChar(100)
+  sync_id       String   @db.VarChar(36)
+  operation     String   @db.VarChar(20)
+  data_snapshot Json?
+  source        String   @default("local") @db.VarChar(20)
+  status        String   @default("pending") @db.VarChar(20)
+  retry_count   Int      @default(0)
+  error_message String?  @db.Text
+  created_at    DateTime @default(now())
+  synced_at     DateTime?
+  updated_at    DateTime @updatedAt
+  sync_id_field String   @unique @default(cuid())
+  is_deleted    Boolean  @default(false)
+  sync_status   String   @default("pending")
+  synced_at_field DateTime?
+}
+
+model SyncConflict {
+  id          Int      @id @default(autoincrement())
+  sync_id     String   @db.VarChar(36)
+  table_name  String   @db.VarChar(100)
+  local_value Json?
+  cloud_value Json?
+  status      String   @default("pending") @db.VarChar(20)
+  resolution  String?  @db.VarChar(20)
+  notes       String?  @db.Text
+  resolved_by Int?
+  resolved_at DateTime?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  sync_id_field String @unique @default(cuid())
+  is_deleted  Boolean  @default(false)
+  sync_status String   @default("pending")
+  synced_at   DateTime?
+
+  resolver User? @relation("ResolvedConflicts", fields: [resolved_by], references: [id])
+  // ✅ العلاقات
 }

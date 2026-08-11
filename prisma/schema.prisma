@@ -91,6 +91,7 @@ model Tenant {
   purchase_returns PurchaseReturn[]
   purchase_return_items PurchaseReturnItem[]
   // sync_queues, data_sync_queues, sync_conflicts تم إزالتها لأنها غير مرتبطة مباشرة بـ Tenant
+  @@map("tenants")
 }
 
 model User {
@@ -142,6 +143,7 @@ model User {
   resolved_conflicts SyncConflict[]      @relation("ResolvedConflicts")
   approved_movements InventoryMovement[] @relation("ApproverMovements")
   cancelled_movements InventoryMovement[] @relation("CancellerMovements")
+  @@map("users")
 }
 
 model Role {
@@ -158,6 +160,7 @@ model Role {
   tenant      Tenant             @relation(fields: [tenant_id], references: [id])
   users       User[]
   permissions RolePermission[]
+  @@map("roles")
 }
 
 model Permission {
@@ -174,6 +177,7 @@ model Permission {
   tenant      Tenant             @relation(fields: [tenant_id], references: [id])
   users       UserPermission[]
   roles       RolePermission[]
+  @@map("permissions")
 }
 
 // =============================================
@@ -188,6 +192,8 @@ model UserPermission {
   permission Permission @relation(fields: [permission_id], references: [id])
 
   @@id([user_id, permission_id])
+  @@map("user_permissions")
+  
 }
 
 model RolePermission {
@@ -198,6 +204,7 @@ model RolePermission {
   permission Permission @relation(fields: [permission_id], references: [id])
 
   @@id([role_id, permission_id])
+  @@map("role_permissions")
 }
 
 // =============================================
@@ -255,6 +262,7 @@ model Employee {
   responsible_sales_returns SalesReturn[]
   responsible_purchase_invoices PurchaseInvoice[]
   responsible_sale_invoices SaleInvoice[]
+  @@map("employees")
 }
 
 // =============================================
@@ -291,6 +299,7 @@ model Warehouse {
   sales_return_items SalesReturnItem[]
   inventory_movements_from InventoryMovement[] @relation("FromWarehouse")
   inventory_movements_to InventoryMovement[] @relation("ToWarehouse")
+  @@map("warehouses")
 }
 
 model Category {
@@ -313,6 +322,7 @@ model Category {
   parent      Category? @relation("CategoryParent", fields: [parent_id], references: [id])
   subcategories Category[] @relation("CategoryParent")
   products    Product[]
+  @@map("categories")
 }
 
 model Product {
@@ -408,6 +418,7 @@ model Product {
   movements             InventoryMovement[]
   company_supplies      CompanyProduct[]
   sync_entries          SyncQueue[]
+  @@map("products")
 }
 
 model ProductBatch {
@@ -443,6 +454,7 @@ model ProductBatch {
   tenant            Tenant            @relation(fields: [tenant_id], references: [id])
   warehouse         Warehouse?        @relation(fields: [warehouse_id], references: [id])
   company           Company?          @relation(fields: [company_id], references: [id])
+  @@map("product_batches")
 }
 
 model ProductDiscountTier {
@@ -467,6 +479,7 @@ model ProductDiscountTier {
   tenant  Tenant    @relation(fields: [tenant_id], references: [id])
   company Company?  @relation(fields: [company_id], references: [id])
   products Product[]
+  @@map("product_discount_tiers")
 }
 
 // =============================================
@@ -525,6 +538,7 @@ model Supplier {
   returns             PurchaseReturn[]
   inventory_movements InventoryMovement[]
   treasury_transactions TreasuryTransaction[]
+  @@map("suppliers")
 }
 
 model Customer {
@@ -581,6 +595,7 @@ model Customer {
   bonuses             CustomerBonus[]
   inventory_movements InventoryMovement[]
   treasury_transactions TreasuryTransaction[]
+  @@map("customers")
 }
 
 model DiscountTier {
@@ -616,6 +631,7 @@ model DiscountTier {
   customers Customer[]
   suppliers Supplier[]
   invoices  SaleInvoice[]
+  @@map("discount_tiers")
 }
 
 model CustomerBonus {
@@ -640,6 +656,7 @@ model CustomerBonus {
   // ✅ العلاقات
   customer Customer @relation(fields: [customer_id], references: [id])
   tenant   Tenant   @relation(fields: [tenant_id], references: [id])
+  @@map("customer_bonuses")
 }
 
 model Company {
@@ -693,6 +710,7 @@ model Company {
   sales_returns        SalesReturn[]
   inventory_movements  InventoryMovement[]
   product_batches      ProductBatch[]
+  @@map("companies")
 }
 
 model CompanyPayment {
@@ -716,6 +734,7 @@ model CompanyPayment {
   company Company @relation(fields: [company_id], references: [id])
   user    User?   @relation(fields: [user_id], references: [id])
   tenant  Tenant  @relation(fields: [tenant_id], references: [id])
+  @@map("company_payments")
 }
 
 model CompanyPurchaseHistory {
@@ -744,6 +763,7 @@ model CompanyPurchaseHistory {
   company Company @relation(fields: [company_id], references: [id])
   user    User?   @relation(fields: [user_id], references: [id])
   tenant  Tenant  @relation(fields: [tenant_id], references: [id])
+  @@map("company_purchase_history")
 }
 
 model CompanyProduct {
@@ -775,6 +795,7 @@ model CompanyProduct {
   product Product @relation(fields: [product_id], references: [id])
   tenant  Tenant  @relation(fields: [tenant_id], references: [id])
   purchase_requests PurchaseRequestItem[]
+  @@map("company_products")
 }
 
 // =============================================
@@ -841,6 +862,7 @@ model SaleInvoice {
   items              SaleInvoiceItem[]
   returns            SalesReturn[]
   treasury_transactions TreasuryTransaction[]
+  @@map("sale_invoices")
 }
 
 model SaleInvoiceItem {
@@ -883,6 +905,7 @@ model SaleInvoiceItem {
   product   Product     @relation(fields: [product_id], references: [id])
   tenant    Tenant      @relation(fields: [tenant_id], references: [id])
   warehouse Warehouse?  @relation(fields: [warehouse_id], references: [id])
+  @@map("sale_invoice_items")
 }
 
 model PurchaseInvoice {
@@ -949,6 +972,7 @@ model PurchaseInvoice {
   batches            ProductBatch[]
   returns            PurchaseReturn[]
   treasury_transactions TreasuryTransaction[]
+  @@map("purchase_invoices")
 }
 
 model PurchaseInvoiceItem {
@@ -984,6 +1008,7 @@ model PurchaseInvoiceItem {
   product   Product         @relation(fields: [product_id], references: [id])
   tenant    Tenant          @relation(fields: [tenant_id], references: [id])
   warehouse Warehouse?      @relation(fields: [warehouse_id], references: [id])
+  @@map("purchase_invoice_items")
 }
 
 // =============================================
@@ -1028,6 +1053,7 @@ model SalesReturn {
   responsible_employee Employee?       @relation(fields: [responsible_employee_id], references: [id])
   items             SalesReturnItem[]
   treasury_transactions TreasuryTransaction[]
+  @@map("sales_returns")
 }
 
 model SalesReturnItem {
@@ -1054,6 +1080,7 @@ model SalesReturnItem {
   product   Product     @relation(fields: [product_id], references: [id])
   tenant    Tenant      @relation(fields: [tenant_id], references: [id])
   warehouse Warehouse?  @relation(fields: [warehouse_id], references: [id])
+  @@map("sales_return_items")
 }
 
 model PurchaseReturn {
@@ -1081,6 +1108,7 @@ model PurchaseReturn {
   tenant   Tenant          @relation(fields: [tenant_id], references: [id])
   items    PurchaseReturnItem[]
   treasury_transactions TreasuryTransaction[]
+  @@map("purchase_returns")
 }
 
 model PurchaseReturnItem {
@@ -1102,6 +1130,7 @@ model PurchaseReturnItem {
   return  PurchaseReturn @relation(fields: [return_id], references: [id])
   product Product       @relation(fields: [product_id], references: [id])
   tenant  Tenant        @relation(fields: [tenant_id], references: [id])
+  @@map("purchase_return_items")
 }
 
 model InventoryMovement {
@@ -1158,6 +1187,7 @@ model InventoryMovement {
   customer        Customer?        @relation(fields: [customer_id], references: [id])
   supplier        Supplier?        @relation(fields: [supplier_id], references: [id])
   company         Company?         @relation(fields: [company_id], references: [id])
+  @@map("inventory_movements")
 }
 
 // =============================================
@@ -1188,6 +1218,7 @@ model PurchaseRequest {
   tenant        Tenant      @relation(fields: [tenant_id], references: [id])
   user          User?       @relation(fields: [user_id], references: [id])
   items         PurchaseRequestItem[]
+  @@map("purchase_requests")
 }
 
 model PurchaseRequestItem {
@@ -1212,6 +1243,7 @@ model PurchaseRequestItem {
   request       PurchaseRequest @relation(fields: [request_id], references: [id])
   company_product CompanyProduct @relation(fields: [company_product_id], references: [id])
   tenant        Tenant          @relation(fields: [tenant_id], references: [id])
+  @@map("purchase_request_items")
 }
 
 model TransactionType {
@@ -1234,6 +1266,7 @@ model TransactionType {
 
   // ✅ العلاقات
   tenant Tenant @relation(fields: [tenant_id], references: [id])
+  @@map("transaction_types")
 }
 
 model ActivityLog {
@@ -1254,6 +1287,7 @@ model ActivityLog {
   // ✅ العلاقات
   user   User?   @relation(fields: [user_id], references: [id])
   tenant Tenant? @relation(fields: [tenant_id], references: [id])
+  @@map("activity_logs")
 }
 
 model Setting {
@@ -1274,6 +1308,7 @@ model Setting {
 
   // ✅ العلاقات
   tenant Tenant? @relation(fields: [tenant_id], references: [id])
+  @@map("settings")
 }
 
 model CustomerTransaction {
@@ -1298,6 +1333,7 @@ model CustomerTransaction {
   customer Customer @relation(fields: [customer_id], references: [id])
   tenant   Tenant   @relation(fields: [tenant_id], references: [id])
   user     User?    @relation(fields: [user_id], references: [id])
+  @@map("customer_transactions")
 }
 
 model CustomerDiscountPolicy {
@@ -1328,6 +1364,7 @@ model CustomerDiscountPolicy {
   tenant  Tenant    @relation(fields: [tenant_id], references: [id])
   company Company?  @relation(fields: [company_id], references: [id])
   customers Customer[]
+  @@map("customer_discount_policies")
 }
 
 model TreasuryTransaction {
@@ -1362,6 +1399,8 @@ model TreasuryTransaction {
   purchase_invoice PurchaseInvoice? @relation(fields: [reference_id], references: [id], map: "TreasuryTransaction_reference_id_purchase_invoice_fkey")
   sales_return    SalesReturn?  @relation(fields: [reference_id], references: [id], map: "TreasuryTransaction_reference_id_sales_return_fkey")
   purchase_return PurchaseReturn? @relation(fields: [reference_id], references: [id], map: "TreasuryTransaction_reference_id_purchase_return_fkey")
+  @@map("treasury_transactions")
+
 }
 
 // =============================================
@@ -1385,6 +1424,7 @@ model SyncQueue {
 
   // ✅ العلاقات
   product Product @relation(fields: [product_id], references: [id])
+  @@map("sync_queue")
 }
 
 model DataSyncQueue {
@@ -1404,6 +1444,7 @@ model DataSyncQueue {
   is_deleted    Boolean  @default(false)
   sync_status   String   @default("pending")
   synced_at_field DateTime?
+  @@map("data_sync_queue")
 }
 
 model SyncConflict {
@@ -1426,4 +1467,5 @@ model SyncConflict {
 
   resolver User? @relation("ResolvedConflicts", fields: [resolved_by], references: [id])
   // ✅ العلاقات
+  @@map("sync_conflicts")
 }

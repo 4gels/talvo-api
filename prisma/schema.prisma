@@ -74,6 +74,7 @@ model Tenant {
   treasury_transactions TreasuryTransaction[]
   settings        Setting[]
   discount_tiers  DiscountTier[]
+  profit_tiers               ProfitTier[]
   product_discount_tiers ProductDiscountTier[]
   customer_discount_policies CustomerDiscountPolicy[]
   customer_transactions CustomerTransaction[]
@@ -541,6 +542,43 @@ model Supplier {
   @@map("suppliers")
 }
 
+// =============================================
+// ✅ جدول شرائح الربح (ProfitTier)
+// =============================================
+
+model ProfitTier {
+  id            Int      @id @default(autoincrement())
+  name          String   @db.VarChar(50)
+  arabic_name   String?  @db.VarChar(50)
+  description   String?  @db.Text
+  
+  // نسبة الربح المضافة (نسبة مئوية)
+  profit_percent Float   @default(0)
+  
+  // فترة السداد بالأيام (اختياري)
+  days          Int      @default(0)
+  
+  // نوع التعامل (retail, wholesale, contract)
+  dealing_type  String   @default("retail") @db.VarChar(20)
+  
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  
+  // ربط الشريحة بالمستأجر
+  tenant_id     Int
+  sync_id       String   @unique @default(cuid())
+  is_deleted    Boolean  @default(false)
+  sync_status   String   @default("pending")
+  synced_at     DateTime?
+
+  // ✅ العلاقات
+  tenant        Tenant   @relation(fields: [tenant_id], references: [id])
+  customers     Customer[] // العلاقة مع العملاء
+  
+  @@map("profit_tiers")
+}
+
 model Customer {
   id                         Int      @id @default(autoincrement())
   customer_id                String   @unique @db.VarChar(20)
@@ -568,6 +606,7 @@ model Customer {
   last_purchase_date         DateTime?
   discount_tier_id           Int?
   use_tier_pricing           Boolean  @default(false)
+  profit_tier_id             Int?
   price_calculation_method   String   @default("wholesale") @db.VarChar(20)
   custom_price_percentage    Float    @default(0)
   payment_method             String   @default("cash") @db.VarChar(20)
@@ -585,6 +624,7 @@ model Customer {
 
   // ✅ العلاقات
   tenant              Tenant    @relation(fields: [tenant_id], references: [id])
+  profit_tier                ProfitTier? @relation(fields: [profit_tier_id], references: [id])
   company             Company?  @relation(fields: [company_id], references: [id])
   responsible_employee Employee? @relation(fields: [responsible_employee_id], references: [id])
   discount_tier       DiscountTier? @relation(fields: [discount_tier_id], references: [id])

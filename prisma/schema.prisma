@@ -130,6 +130,7 @@ model User {
   cancelled_sales  SaleInvoice[] @relation("SaleInvoiceCanceller")
 
 
+  received_purchases PurchaseInvoice[] @relation("PurchaseInvoiceReceiver")
   purchase_invoices    PurchaseInvoice[] @relation("PurchaseInvoiceUser")
   approved_purchases   PurchaseInvoice[] @relation("PurchaseInvoiceApprover")
   cancelled_purchases  PurchaseInvoice[] @relation("PurchaseInvoiceCanceller")
@@ -954,12 +955,14 @@ model PurchaseInvoice {
   invoice_date          DateTime @default(now())
   supplier_id           Int?
   user_id               Int?
+  
   subtotal              Float    @default(0)
   discount              Float    @default(0)
   tax                   Float    @default(0)
   total                 Float    @default(0)
   paid                  Float    @default(0)
   remaining             Float    @default(0)
+  
   tenant_id             Int
   status                String   @default("pending") @db.VarChar(20)
   payment_type          String?  @db.VarChar(20)
@@ -994,6 +997,17 @@ model PurchaseInvoice {
   authorized_at         DateTime?
   total_cost            Float    @default(0)
   expected_profit       Float    @default(0)
+  
+  // ✅ ✅ ✅ حقول جديدة (مضافة)
+  is_return             Boolean  @default(false)   // هل هي فاتورة مرتجع؟
+  original_invoice_id   Int?                       // الفاتورة الأصلية (للمرتجع)
+  return_reason         String?  @db.VarChar(200)  // سبب المرتجع
+  
+  // ✅ ✅ ✅ حقول الاستلام (جديدة)
+  is_received           Boolean  @default(false)   // هل تم الاستلام؟
+  received_at           DateTime?                  // تاريخ الاستلام
+  received_by           Int?                       // من استلم
+  
   sync_id               String   @unique @default(cuid())
   is_deleted            Boolean  @default(false)
   sync_status           String   @default("pending")
@@ -1005,13 +1019,18 @@ model PurchaseInvoice {
   approver           User?             @relation("PurchaseInvoiceApprover", fields: [approved_by], references: [id])
   canceller          User?             @relation("PurchaseInvoiceCanceller", fields: [cancelled_by], references: [id])
   authorizer         User?             @relation("PurchaseInvoiceAuthorizer", fields: [authorized_by], references: [id])
+  receiver           User?             @relation("PurchaseInvoiceReceiver", fields: [received_by], references: [id])  // ✅ جديد
   tenant             Tenant            @relation(fields: [tenant_id], references: [id])
   company            Company?          @relation(fields: [company_id], references: [id])
   responsible_employee Employee?       @relation(fields: [responsible_employee_id], references: [id])
+  original_invoice   PurchaseInvoice?  @relation("OriginalInvoice", fields: [original_invoice_id], references: [id])
+  child_invoices     PurchaseInvoice[] @relation("OriginalInvoice")
+
+  returns            PurchaseReturn[]  
   items              PurchaseInvoiceItem[]
   batches            ProductBatch[]
-  returns            PurchaseReturn[]
   treasury_transactions TreasuryTransaction[]
+  
   @@map("purchase_invoices")
 }
 
@@ -1036,6 +1055,11 @@ model PurchaseInvoiceItem {
   item_notes            String?  @db.Text
   quality_status        String   @default("pending") @db.VarChar(20)
   received_quantity     Float    @default(0)
+  
+  // ✅ ✅ ✅ حقول جديدة (مضافة)
+  batch_number          String?  @db.VarChar(50)   // رقم التشغيلة
+  expiry_date           DateTime?                   // تاريخ الصلاحية
+  
   created_at            DateTime @default(now())
   updated_at            DateTime @updatedAt
   sync_id               String   @unique @default(cuid())
@@ -1048,6 +1072,7 @@ model PurchaseInvoiceItem {
   product   Product         @relation(fields: [product_id], references: [id])
   tenant    Tenant          @relation(fields: [tenant_id], references: [id])
   warehouse Warehouse?      @relation(fields: [warehouse_id], references: [id])
+  
   @@map("purchase_invoice_items")
 }
 

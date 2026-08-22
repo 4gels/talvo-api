@@ -1356,23 +1356,28 @@ model ActivityLog {
 }
 
 model Setting {
-  id          Int      @id @default(autoincrement())
-  key         String   @unique @db.VarChar(100)
-  value       String?  @db.Text
-  group_name  String   @default("general") @db.VarChar(50)
-  is_public   Boolean  @default(false)
-  is_encrypted Boolean @default(false)
-  description String?  @db.VarChar(200)
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
-  tenant_id   Int?
-  sync_id     String   @unique @default(cuid())
-  is_deleted  Boolean  @default(false)
-  sync_status String   @default("pending")
-  synced_at   DateTime?
+  id            Int       @id @default(autoincrement())
+  key           String    @db.VarChar(100)
+  value         String?   @db.Text
+  group_name    String    @default("general") @db.VarChar(50)
+  is_public     Boolean   @default(false)
+  is_encrypted  Boolean   @default(false)
+  description   String?   @db.VarChar(200)
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
 
-  // ✅ العلاقات
-  tenant Tenant? @relation(fields: [tenant_id], references: [id])
+  tenant_id     Int?
+  sync_id       String    @unique @default(cuid())
+  is_deleted    Boolean   @default(false)
+  sync_status   String    @default("pending")
+  synced_at     DateTime?
+
+  tenant        Tenant?   @relation(fields: [tenant_id], references: [id])
+
+  @@unique([key, tenant_id], name: "uq_settings_key_tenant")
+  @@index([tenant_id])
+  @@index([group_name])
+
   @@map("settings")
 }
 

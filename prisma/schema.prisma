@@ -75,6 +75,7 @@ model Tenant {
   settings        Setting[]
   discount_tiers  DiscountTier[]
   profit_tiers               ProfitTier[]
+  overdue_tiers       OverdueTier[]
   product_discount_tiers ProductDiscountTier[]
   customer_discount_policies CustomerDiscountPolicy[]
   customer_transactions CustomerTransaction[]
@@ -91,6 +92,14 @@ model Tenant {
   sales_return_items SalesReturnItem[]
   purchase_returns PurchaseReturn[]
   purchase_return_items PurchaseReturnItem[]
+
+  is_primary_server     Boolean  @default(false)
+  primary_server_url    String?  @db.VarChar(200)
+  primary_server_ip     String?  @db.VarChar(50)
+  primary_server_port   Int      @default(5000)
+  is_online             Boolean  @default(false)
+  last_heartbeat        DateTime?
+
   // sync_queues, data_sync_queues, sync_conflicts تم إزالتها لأنها غير مرتبطة مباشرة بـ Tenant
   @@map("tenants")
 }
@@ -580,6 +589,47 @@ model ProfitTier {
   @@map("profit_tiers")
 }
 
+// =============================================
+// ✅ جدول شرائح التأخير (OverdueTier)
+// =============================================
+
+model OverdueTier {
+  id              Int      @id @default(autoincrement())
+  name            String   @db.VarChar(50)
+  arabic_name     String?  @db.VarChar(50)
+  description     String?  @db.Text
+  
+  // ✅ نطاق أيام التأخير
+  days_from       Int      @default(1)
+  days_to         Int      @default(7)
+  
+  // ✅ نسبة الزيادة (نسبة مئوية)
+  increase_percent Float   @default(0)
+  
+  // ✅ نوع التعامل (retail, wholesale, contract)
+  dealing_type    String   @default("retail") @db.VarChar(20)
+  
+  // ✅ الحالة
+  is_active       Boolean  @default(true)
+  
+  // ✅ التواريخ
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+  
+  // ✅ ربط الشريحة بالمستأجر
+  tenant_id       Int
+  sync_id         String   @unique @default(cuid())
+  is_deleted      Boolean  @default(false)
+  sync_status     String   @default("pending")
+  synced_at       DateTime?
+
+  // ✅ العلاقات
+  tenant           Tenant            @relation(fields: [tenant_id], references: [id])
+  invoices         SaleInvoice[]
+  applied_to_items SaleInvoiceItem[] @relation("OverdueTierAppliedToItems")  
+  @@map("overdue_tiers")
+}
+
 model Customer {
   id                         Int      @id @default(autoincrement())
   customer_id                String   @unique @db.VarChar(20)
@@ -891,6 +941,32 @@ model SaleInvoice {
   sync_status           String   @default("pending")
   synced_at             DateTime?
 
+  // =========================================
+  // ✅ ✅ ✅ حقول التأخير الجديدة
+  // =========================================
+  
+  // ✅ شريحة التأخير المطبقة
+  overdue_tier_id       Int?
+  
+  // ✅ عدد أيام التأخير عند آخر تحديث
+  overdue_days          Int      @default(0)
+  
+  // ✅ نسبة الزيادة المطبقة (للتتبع)
+  overdue_percent       Float    @default(0)
+  
+  // ✅ آخر تاريخ تم فيه فحص التأخير
+  last_overdue_check    DateTime?
+  
+  // ✅ هل تم تطبيق زيادة التأخير؟
+  has_overdue_applied   Boolean  @default(false)
+  
+  // ✅ السعر الأصلي للفاتورة (قبل أي زيادة تأخير)
+  original_total        Float    @default(0)
+  
+  // ✅ العلاقة الجديدة
+  overdue_tier          OverdueTier? @relation(fields: [overdue_tier_id], references: [id])
+
+
   // ✅ العلاقات (تم إزالة أسماء العلاقات غير الضرورية)
   customer           Customer?         @relation(fields: [customer_id], references: [id])
   user               User?             @relation("SaleInvoiceUser", fields: [user_id], references: [id])
@@ -940,6 +1016,33 @@ model SaleInvoiceItem {
   is_deleted              Boolean  @default(false)
   sync_status             String   @default("pending")
   synced_at               DateTime?
+
+
+  // =========================================
+  // ✅ ✅ ✅ حقول التأخير الجديدة
+  // =========================================
+  
+  // ✅ السعر الأصلي (قبل أي زيادة تأخير)
+  original_unit_price       Float    @default(0)
+  
+  // ✅ السعر بعد زيادة التأخير
+  overdue_unit_price        Float    @default(0)
+  
+  // ✅ نسبة الزيادة المطبقة على هذا العنصر
+  overdue_percent_applied   Float    @default(0)
+  
+  // ✅ معرف شريحة التأخير المطبقة (للتتبع)
+  overdue_tier_id_applied   Int?
+  
+  // ✅ تاريخ تطبيق الزيادة
+  overdue_applied_at        DateTime?
+  
+  // ✅ هل تم تطبيق زيادة تأخير على هذا العنصر؟
+  has_overdue_applied       Boolean  @default(false)
+  
+  // ✅ العلاقة الجديدة
+  overdue_tier_applied      OverdueTier? @relation( "OverdueTierAppliedToItems", fields: [overdue_tier_id_applied], references: [id])
+
 
   // ✅ العلاقات
   invoice   SaleInvoice @relation(fields: [invoice_id], references: [id])

@@ -41,6 +41,7 @@ export class TenantsController {
     }
   }
 
+  // ✅ ✅ ✅ دالة create - إضافة حقول السيرفر
   async create(req: Request, res: Response) {
     try {
       const data = req.body;
@@ -66,7 +67,7 @@ export class TenantsController {
       const expiryDate = new Date();
       expiryDate.setDate(expiryDate.getDate() + (data.subscription_days || 365));
       
-      // ✅ Create tenant
+      // ✅ Create tenant مع حقول السيرفر
       const tenant = await prisma.tenant.create({
         data: {
           name: data.name,
@@ -98,7 +99,15 @@ export class TenantsController {
           can_export_data: data.can_export_data ?? false,
           can_import_data: data.can_import_data ?? false,
           can_manage_roles: data.can_manage_roles ?? false,
-          can_view_audit_log: data.can_view_audit_log ?? false
+          can_view_audit_log: data.can_view_audit_log ?? false,
+          
+          // ✅ ✅ ✅ حقول السيرفر الجديدة
+          is_primary_server: data.is_primary_server ?? false,
+          primary_server_url: data.primary_server_url ?? null,
+          primary_server_ip: data.primary_server_ip ?? null,
+          primary_server_port: data.primary_server_port ?? 5000,
+          is_online: data.is_online ?? false,
+          last_heartbeat: data.last_heartbeat ? new Date(data.last_heartbeat) : null,
         }
       });
       
@@ -130,6 +139,7 @@ export class TenantsController {
     }
   }
 
+  // ✅ ✅ ✅ دالة update - إضافة حقول السيرفر
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -152,7 +162,7 @@ export class TenantsController {
         subscriptionExpiry = newExpiry;
       }
       
-      // ✅ Update tenant
+      // ✅ Update tenant مع حقول السيرفر
       const updated = await prisma.tenant.update({
         where: { id: Number(id) },
         data: {
@@ -183,7 +193,15 @@ export class TenantsController {
           can_export_data: data.can_export_data ?? tenant.can_export_data,
           can_import_data: data.can_import_data ?? tenant.can_import_data,
           can_manage_roles: data.can_manage_roles ?? tenant.can_manage_roles,
-          can_view_audit_log: data.can_view_audit_log ?? tenant.can_view_audit_log
+          can_view_audit_log: data.can_view_audit_log ?? tenant.can_view_audit_log,
+          
+          // ✅ ✅ ✅ حقول السيرفر الجديدة
+          is_primary_server: data.is_primary_server ?? tenant.is_primary_server,
+          primary_server_url: data.primary_server_url ?? tenant.primary_server_url,
+          primary_server_ip: data.primary_server_ip ?? tenant.primary_server_ip,
+          primary_server_port: data.primary_server_port ?? tenant.primary_server_port,
+          is_online: data.is_online ?? tenant.is_online,
+          last_heartbeat: data.last_heartbeat ? new Date(data.last_heartbeat) : tenant.last_heartbeat,
         }
       });
       
@@ -263,6 +281,53 @@ export class TenantsController {
     } catch (error) {
       console.error('Toggle status error:', error);
       res.status(500).json({ error: 'Failed to toggle status' });
+    }
+  }
+
+  // ✅ ✅ ✅ دالة جديدة: Heartbeat - تحديث حالة السيرفر
+  async heartbeat(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { is_online, primary_server_url, primary_server_ip, primary_server_port } = req.body;
+      
+      // ✅ التحقق من وجود المستأجر
+      const tenant = await prisma.tenant.findFirst({
+        where: { id: Number(id), is_deleted: false }
+      });
+      
+      if (!tenant) {
+        return res.status(404).json({ error: 'Tenant not found' });
+      }
+      
+      // ✅ تحديث حالة السيرفر
+      const updated = await prisma.tenant.update({
+        where: { id: Number(id) },
+        data: {
+          is_online: is_online ?? true,
+          last_heartbeat: new Date(),
+          is_primary_server: true,
+          primary_server_url: primary_server_url ?? tenant.primary_server_url,
+          primary_server_ip: primary_server_ip ?? tenant.primary_server_ip,
+          primary_server_port: primary_server_port ?? tenant.primary_server_port,
+        }
+      });
+      
+      res.json({
+        success: true,
+        message: 'Heartbeat received successfully',
+        tenant: {
+          id: updated.id,
+          name: updated.name,
+          is_online: updated.is_online,
+          last_heartbeat: updated.last_heartbeat,
+          primary_server_url: updated.primary_server_url,
+          primary_server_ip: updated.primary_server_ip,
+          primary_server_port: updated.primary_server_port,
+        }
+      });
+    } catch (error) {
+      console.error('Heartbeat error:', error);
+      res.status(500).json({ error: 'Failed to update heartbeat' });
     }
   }
 }

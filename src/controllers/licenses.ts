@@ -37,7 +37,15 @@ export class LicensesController {
         can_export_data: data.can_export_data ?? false,
         can_import_data: data.can_import_data ?? false,
         can_manage_roles: data.can_manage_roles ?? false,
-        can_view_audit_log: data.can_view_audit_log ?? false
+        can_view_audit_log: data.can_view_audit_log ?? false,
+        
+        // ✅ ✅ ✅ حقول السيرفر الجديدة (عند إنشاء ترخيص جديد)
+        is_primary_server: false,
+        primary_server_url: null,
+        primary_server_ip: null,
+        primary_server_port: 5000,
+        is_online: false,
+        last_heartbeat: null,
       };
       
       // ✅ إنشاء المستأجر
@@ -65,6 +73,7 @@ export class LicensesController {
     }
   }
 
+  // ✅ ✅ ✅ دالة validate - الأهم! (ترجع معلومات السيرفر)
   async validate(req: Request, res: Response) {
     try {
       const { license_key } = req.params;
@@ -104,9 +113,59 @@ export class LicensesController {
         daysLeft = Math.ceil(diff / (1000 * 60 * 60 * 24));
       }
       
+      // ✅ ✅ ✅ إرجاع معلومات السيرفر مع الرد
       res.json({
         valid: true,
-        tenant,
+        tenant: {
+          id: tenant.id,
+          name: tenant.name,
+          arabic_name: tenant.arabic_name,
+          license_key: tenant.license_key,
+          db_name: tenant.db_name,
+          phone: tenant.phone,
+          email: tenant.email,
+          address: tenant.address,
+          tax_number: tenant.tax_number,
+          commercial_register: tenant.commercial_register,
+          currency: tenant.currency,
+          timezone: tenant.timezone,
+          is_active: tenant.is_active,
+          max_users: tenant.max_users,
+          max_storage_mb: tenant.max_storage_mb,
+          subscription_plan: tenant.subscription_plan,
+          subscription_expiry: tenant.subscription_expiry?.toISOString() || null,
+          total_users: tenant.total_users,
+          total_storage_used_mb: tenant.total_storage_used_mb,
+          
+          // ✅ ✅ ✅ حقول السيرفر (الأساسية)
+          is_primary_server: tenant.is_primary_server,
+          primary_server_url: tenant.primary_server_url,
+          primary_server_ip: tenant.primary_server_ip,
+          primary_server_port: tenant.primary_server_port,
+          is_online: tenant.is_online,
+          last_heartbeat: tenant.last_heartbeat?.toISOString() || null,
+          
+          // ✅ صلاحيات الشركة
+          can_manage_products: tenant.can_manage_products,
+          can_manage_sales: tenant.can_manage_sales,
+          can_manage_purchases: tenant.can_manage_purchases,
+          can_manage_inventory: tenant.can_manage_inventory,
+          can_manage_customers: tenant.can_manage_customers,
+          can_manage_suppliers: tenant.can_manage_suppliers,
+          can_manage_employees: tenant.can_manage_employees,
+          can_manage_reports: tenant.can_manage_reports,
+          can_manage_settings: tenant.can_manage_settings,
+          can_manage_backup: tenant.can_manage_backup,
+          can_export_data: tenant.can_export_data,
+          can_import_data: tenant.can_import_data,
+          can_manage_roles: tenant.can_manage_roles,
+          can_view_audit_log: tenant.can_view_audit_log,
+          
+          created_at: tenant.created_at?.toISOString(),
+          updated_at: tenant.updated_at?.toISOString(),
+          last_login: tenant.last_login?.toISOString(),
+          last_activity: tenant.last_activity?.toISOString(),
+        },
         message: 'المفتاح صالح',
         expiry_date: tenant.subscription_expiry?.toISOString() || null,
         days_left: daysLeft

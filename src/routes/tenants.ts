@@ -29,4 +29,9 @@ router.post('/:id/toggle-status', authMiddleware, (req: Request, res: Response) 
   tenantsController.toggleStatus(req, res)
 );
 
+// ✅ ✅ ✅ مسار Heartbeat الجديد - لتحديث حالة السيرفر
+router.post('/:id/heartbeat', authMiddleware, (req: Request, res: Response) => 
+  tenantsController.heartbeat(req, res)
+);
+
 export default router;

@@ -111,12 +111,14 @@ export class TenantsController {
         }
       });
       
-      // ✅ Create admin user
+      // ✅ ✅ ✅ Create admin user with UNIQUE username
       const adminPassword = 'admin123';
+      const adminUsername = `admin_${tenant.id}`; // ✅ admin_1, admin_2, ...
+      
       const adminUser = await prisma.user.create({
         data: {
-          username: 'admin',
-          email: data.email || `admin@${data.name}.com`,
+          username: adminUsername,
+          email: data.email || `admin_${tenant.id}@${data.name}.com`,
           full_name: 'مدير النظام',
           password_hash: hashPassword(adminPassword),
           is_admin: true,
@@ -131,6 +133,7 @@ export class TenantsController {
         tenant,
         license_key: tenant.license_key,
         admin_password: adminPassword,
+        admin_username: adminUsername, // ✅ إرسال اسم المستخدم مع الرد
         message: `تم إنشاء المستأجر ${tenant.name} بنجاح`
       });
     } catch (error) {
@@ -138,6 +141,7 @@ export class TenantsController {
       res.status(500).json({ error: 'Failed to create tenant' });
     }
   }
+
 
   // ✅ ✅ ✅ دالة update - إضافة حقول السيرفر
   async update(req: Request, res: Response) {

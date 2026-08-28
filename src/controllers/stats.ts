@@ -30,6 +30,11 @@ export class StatsController {
         enterprise: tenants.filter(t => t.subscription_plan === 'enterprise').length
       };
       
+      // ✅✅✅ إحصائيات السيرفر (جديدة)
+      const totalServers = tenants.filter(t => t.is_primary_server).length;
+      const onlineServers = tenants.filter(t => t.is_primary_server && t.is_online).length;
+      const offlineServers = totalServers - onlineServers;
+      
       res.json({
         total_tenants: totalTenants,
         active_tenants: activeTenants,
@@ -40,7 +45,12 @@ export class StatsController {
         total_sales: 0,
         total_profit: 0,
         total_invoices: 0,
-        plan_distribution: planDistribution
+        plan_distribution: planDistribution,
+        
+        // ✅✅✅ إحصائيات السيرفر
+        total_servers: totalServers,
+        online_servers: onlineServers,
+        offline_servers: offlineServers,
       });
     } catch (error) {
       console.error('Get stats error:', error);

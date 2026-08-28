@@ -63,6 +63,7 @@ model Tenant {
   permissions     Permission[]
   employees       Employee[]
   warehouses      Warehouse[]
+  warehouse_employees WarehouseEmployee[]
   categories      Category[]
   products        Product[]
   product_batches ProductBatch[]
@@ -137,7 +138,7 @@ model User {
   sale_invoices    SaleInvoice[] @relation("SaleInvoiceUser")
   approved_sales   SaleInvoice[] @relation("SaleInvoiceApprover")
   cancelled_sales  SaleInvoice[] @relation("SaleInvoiceCanceller")
-
+  assigned_warehouse_employees WarehouseEmployee[] @relation("AssignedBy")
 
   received_purchases PurchaseInvoice[] @relation("PurchaseInvoiceReceiver")
   purchase_invoices    PurchaseInvoice[] @relation("PurchaseInvoiceUser")
@@ -266,6 +267,9 @@ model Employee {
   company           Company?        @relation(fields: [company_id], references: [id])
   supervisor        Employee?       @relation("Supervisor", fields: [supervisor_id], references: [id])
   subordinates      Employee[]      @relation("Supervisor")
+  managed_warehouse Warehouse? @relation("WarehouseManager")  // المخزن الذي يديره
+  warehouse_assignments WarehouseEmployee[]  // التعيينات في المخازن
+
   user              User?
   responsible_products Product[]
   responsible_suppliers Supplier[]
@@ -295,14 +299,18 @@ model Warehouse {
   updated_at  DateTime @updatedAt
   company_id  Int?
   tenant_id   Int
-  sync_id     String  @unique @default(cuid())
-  is_deleted  Boolean @default(false)
-  sync_status String  @default("pending")
+  manager_id  Int?     @unique  // ✅ تمت الإضافة
+  
+  sync_id     String   @unique @default(cuid())
+  is_deleted  Boolean  @default(false)
+  sync_status String   @default("pending")
   synced_at   DateTime?
 
   // ✅ العلاقات
   tenant          Tenant          @relation(fields: [tenant_id], references: [id])
   company         Company?        @relation(fields: [company_id], references: [id])
+  manager_employee Employee?       @relation("WarehouseManager", fields: [manager_id], references: [id])
+  
   products        Product[]       @relation("DefaultWarehouse")
   batches         ProductBatch[]
   sale_items      SaleInvoiceItem[]
@@ -310,7 +318,39 @@ model Warehouse {
   sales_return_items SalesReturnItem[]
   inventory_movements_from InventoryMovement[] @relation("FromWarehouse")
   inventory_movements_to InventoryMovement[] @relation("ToWarehouse")
+  employee_assignments WarehouseEmployee[]
+
   @@map("warehouses")
+}
+// =============================================
+// ✅ جدول ربط الموظفين بالمخازن
+// =============================================
+
+model WarehouseEmployee {
+  id          Int      @id @default(autoincrement())
+  warehouse_id Int
+  employee_id Int
+  
+  role        String   @default("staff") @db.VarChar(20)
+  is_active   Boolean  @default(true)
+  assigned_at DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  assigned_by Int?
+  tenant_id   Int
+  
+  sync_id     String   @unique @default(cuid())
+  is_deleted  Boolean  @default(false)
+  sync_status String   @default("pending")
+  synced_at   DateTime?
+
+  // ✅ العلاقات
+  warehouse   Warehouse @relation(fields: [warehouse_id], references: [id])
+  employee    Employee  @relation(fields: [employee_id], references: [id])
+  assigner    User?     @relation("AssignedBy", fields: [assigned_by], references: [id])  // ✅ اسم العلاقة
+  tenant      Tenant    @relation(fields: [tenant_id], references: [id])
+
+  @@unique([warehouse_id, employee_id])
+  @@map("warehouse_employees")
 }
 
 model Category {
@@ -356,10 +396,34 @@ model Product {
   max_quantity          Float    @default(0)
   reorder_level         Float    @default(0)
   tenant_id             Int
+  
+  // =========================================
+  // ✅ الأسعار الموحدة (بدون تكرار)
+  // =========================================
+  
+  // سعر التكلفة
   purchase_price        Float    @default(0)
-  sale_price_1          Float    @default(0)
-  sale_price_2          Float    @default(0)
-  sale_price_3          Float    @default(0)
+  
+  // أسعار البيع (اللي انت بتبيع بيه)
+  price_wholesale       Float    @default(0)          // سعر الجملة (كان sale_price_1)
+  price_half_wholesale  Float    @default(0)          // سعر نصف الجملة (كان sale_price_2)
+  price_retail          Float    @default(0)          // سعر القطاعي (كان sale_price_3)
+  price_contract        Float    @default(0)          // سعر التعاقد
+  
+  // سعر التوجيه (مش سعر بيعك)
+  price_public          Float    @default(0)          // سعر الجمهور (للتاجر)
+  
+  // أسعار خاصة
+  price_rep             Float    @default(0)          // سعر المندوب (كان sale_price_rep)
+  price_company         Float    @default(0)          // سعر الشركة (كان sale_price_company)
+  
+  // ❌ الحقول القديمة - تم إزالتها
+  // sale_price_1  ❌ (استخدم price_wholesale)
+  // sale_price_2  ❌ (استخدم price_half_wholesale)
+  // sale_price_3  ❌ (استخدم price_retail)
+  // sale_price_rep ❌ (استخدم price_rep)
+  // sale_price_company ❌ (استخدم price_company)
+  
   unit                  String?  @db.VarChar(20)
   is_active             Boolean  @default(true)
   created_at            DateTime @default(now())
@@ -378,9 +442,7 @@ model Product {
   default_warehouse_id  Int?
   company_id            Int?
   responsible_employee_id Int?
-  price_retail          Float    @default(0)
-  price_wholesale       Float    @default(0)
-  price_contract        Float    @default(0)
+  
   use_tier_pricing      Boolean  @default(false)
   has_discount          Boolean  @default(false)
   discount_percent      Float    @default(0)
@@ -396,23 +458,18 @@ model Product {
   audience              String?  @db.VarChar(100)
   promoter              String?  @db.VarChar(100)
   packet                String?  @db.VarChar(50)
-  sale_price_rep        Float    @default(0)
-  sale_price_company    Float    @default(0)
   has_offer             Boolean  @default(false)
   offer_price           Float    @default(0)
   offer_start_date      DateTime?
   offer_end_date        DateTime?
   offer_description     String?  @db.VarChar(200)
   created_by            Int?
-  price_public          Float    @default(0)
   sync_id               String   @unique @default(cuid())
   is_deleted            Boolean  @default(false)
   sync_status           String   @default("pending")
   synced_at             DateTime?
   sales_return_items SalesReturnItem[]
   purchase_return_items PurchaseReturnItem[]
-
-
 
   // ✅ العلاقات
   tenant                Tenant          @relation(fields: [tenant_id], references: [id])
@@ -429,8 +486,10 @@ model Product {
   movements             InventoryMovement[]
   company_supplies      CompanyProduct[]
   sync_entries          SyncQueue[]
+  
   @@map("products")
 }
+
 
 model ProductBatch {
   id                   Int      @id @default(autoincrement())
@@ -438,17 +497,21 @@ model ProductBatch {
   batch_number         String   @db.VarChar(50)
   expiry_date          DateTime
   quantity             Float
+  
+  // =========================================
+  // ✅ التكلفة فقط (بدون أسعار بيع)
+  // =========================================
   purchase_price       Float    @default(0)
-  sale_price_1         Float    @default(0)
-  sale_price_2         Float    @default(0)
-  sale_price_3         Float    @default(0)
+  avg_cost             Float    @default(0)
+  
+  // ❌ تم حذف sale_price_1, sale_price_2, sale_price_3
+  
   supplier_id          Int?
   purchase_invoice_id  Int?
   is_active            Boolean  @default(true)
   created_at           DateTime @default(now())
   updated_at           DateTime @updatedAt
   tax_rate             Float    @default(0)
-  avg_cost             Float    @default(0)
   notes                String?  @db.Text
   tenant_id            Int
   warehouse_id         Int?
@@ -458,13 +521,14 @@ model ProductBatch {
   sync_status          String   @default("pending")
   synced_at            DateTime?
 
-  // ✅ العلاقات (تم إزالة أسماء العلاقات غير الضرورية)
+  // ✅ العلاقات
   product           Product           @relation(fields: [product_id], references: [id])
   supplier          Supplier?         @relation(fields: [supplier_id], references: [id])
   purchase_invoice  PurchaseInvoice?  @relation(fields: [purchase_invoice_id], references: [id])
   tenant            Tenant            @relation(fields: [tenant_id], references: [id])
   warehouse         Warehouse?        @relation(fields: [warehouse_id], references: [id])
   company           Company?          @relation(fields: [company_id], references: [id])
+  
   @@map("product_batches")
 }
 

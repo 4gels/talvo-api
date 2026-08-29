@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-const SECRET_KEY = process.env.SECRET_KEY || 'talvo-admin-secret-key-2026';
+const SECRET_KEY = process.env.SECRET_KEY || 'talvo-admin-secret-key-2026-super-secure';
 
 export class AuthController {
   // ✅ أضف هذه الدالة الجديدة

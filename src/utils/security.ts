@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-const SECRET_KEY = process.env.SECRET_KEY || 'talvo-admin-secret-key-2026';
+const SECRET_KEY = process.env.SECRET_KEY || 'talvo-admin-secret-key-2026-super-secure';
 
 export const hashPassword = (password: string): string => {
   return bcrypt.hashSync(password, 10);

@@ -34,4 +34,8 @@ router.post('/:id/heartbeat', authMiddleware, (req: Request, res: Response) =>
   tenantsController.heartbeat(req, res)
 );
 
+// ✅ ✅ ✅ Routes الفروع (Nested)
+import tenantBranchesRoutes from './tenantBranches';
+router.use('/:tenantId/branches', tenantBranchesRoutes);
+
 export default router;

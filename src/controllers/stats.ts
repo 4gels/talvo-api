@@ -30,10 +30,23 @@ export class StatsController {
         enterprise: tenants.filter(t => t.subscription_plan === 'enterprise').length
       };
       
-      // ✅✅✅ إحصائيات السيرفر (جديدة)
+      // ✅✅✅ إحصائيات السيرفر
       const totalServers = tenants.filter(t => t.is_primary_server).length;
       const onlineServers = tenants.filter(t => t.is_primary_server && t.is_online).length;
       const offlineServers = totalServers - onlineServers;
+      
+      // ✅✅✅ إحصائيات الفروع (جديدة)
+      const totalBranches = await prisma.branch.count({
+        where: { is_deleted: false }
+      });
+      
+      const onlineBranches = await prisma.branch.count({
+        where: { is_deleted: false, is_online: true, is_active: true }
+      });
+      
+      const activeBranches = await prisma.branch.count({
+        where: { is_deleted: false, is_active: true }
+      });
       
       res.json({
         total_tenants: totalTenants,
@@ -51,6 +64,13 @@ export class StatsController {
         total_servers: totalServers,
         online_servers: onlineServers,
         offline_servers: offlineServers,
+        
+        // ✅✅✅ إحصائيات الفروع
+        total_branches: totalBranches,
+        online_branches: onlineBranches,
+        offline_branches: totalBranches - onlineBranches,
+        active_branches: activeBranches,
+        inactive_branches: totalBranches - activeBranches,
       });
     } catch (error) {
       console.error('Get stats error:', error);

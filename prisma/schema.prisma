@@ -58,6 +58,7 @@ model Tenant {
   purchase_invoice_items PurchaseInvoiceItem[]
 
   // ✅ العلاقات
+  branches        Branch[]
   users           User[]
   roles           Role[]
   permissions     Permission[]
@@ -103,6 +104,58 @@ model Tenant {
 
   // sync_queues, data_sync_queues, sync_conflicts تم إزالتها لأنها غير مرتبطة مباشرة بـ Tenant
   @@map("tenants")
+}
+
+// =============================================
+// ✅ 9. جدول الفروع (Branches)
+// =============================================
+
+model Branch {
+  id                    Int      @id @default(autoincrement())
+  
+  // ✅ الربط بالمستأجر
+  tenant_id             Int
+  
+  // ✅ كود الفرع (اللي المستخدم بيدخله)
+  // مثال: BR-10-A1B2C3D4
+  branch_code           String   @unique @db.VarChar(64)
+  
+  // ✅ اسم الفرع
+  branch_name           String   @db.VarChar(100)
+  arabic_name           String?  @db.VarChar(100)
+  
+  // ✅ الحالة
+  is_active             Boolean  @default(true)
+  is_online             Boolean  @default(false)
+  
+  // ✅ آخر ظهور
+  last_seen             DateTime?
+  last_login            DateTime?
+  
+  // ✅ معلومات الجهاز
+  device_name           String?  @db.VarChar(100)
+  device_ip             String?  @db.VarChar(50)
+  
+  // ✅ إحصائيات
+  total_users           Int      @default(0)
+  
+  // ✅ Sync fields
+  sync_id               String   @unique @default(cuid())
+  is_deleted            Boolean  @default(false)
+  sync_status           String   @default("pending") @db.VarChar(20)
+  synced_at             DateTime?
+  
+  // ✅ التواريخ
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  // ✅ العلاقات
+  tenant                Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  
+  @@index([tenant_id])
+  @@index([branch_code])
+  @@index([is_active])
+  @@map("branches")
 }
 
 model User {

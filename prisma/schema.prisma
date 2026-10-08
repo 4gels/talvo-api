@@ -96,8 +96,8 @@ model Tenant {
   purchase_return_items PurchaseReturnItem[]
 
   is_primary_server     Boolean  @default(false)
-  primary_server_url    String?  @db.VarChar(200)
-  primary_server_ip     String?  @db.VarChar(50)
+  primary_server_url    String?  @db.VarChar(500)
+  primary_server_ip     String?  @db.VarChar(500)
   primary_server_port   Int      @default(5000)
   is_online             Boolean  @default(false)
   last_heartbeat        DateTime?

@@ -14,4 +14,9 @@ router.get('/cancel', (req, res) =>
   tenantsController.shopSubscriptionCancel(req, res)
 );
 
+// ✅ ✅ ✅ Webhook من PayPal
+router.post('/webhook', (req, res) =>
+  tenantsController.shopSubscriptionWebhook(req, res)
+);
+
 export default router;

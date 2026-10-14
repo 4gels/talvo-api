@@ -832,4 +832,143 @@ export class TenantsController {
       res.status(500).json({ error: 'Failed' });
     }
   }
+    // ═══════════════════════════════════════════════════════════
+  // ✅ Webhook من PayPal
+  // ═══════════════════════════════════════════════════════════
+
+  async shopSubscriptionWebhook(req: Request, res: Response) {
+    try {
+      console.log('📥 PayPal Webhook received');
+      console.log('Event:', req.body?.event_type);
+      console.log('Resource:', JSON.stringify(req.body?.resource, null, 2));
+
+      const event = req.body;
+      const eventType = event?.event_type;
+      const resource = event?.resource;
+
+      // ═══════════════════════════════════════════════════════
+      // ✅ معالجة الأحداث
+      // ═══════════════════════════════════════════════════════
+
+      switch (eventType) {
+        case 'PAYMENT.CAPTURE.COMPLETED': {
+          const customId = resource?.custom_id || '';
+          // custom_id = "tenantId|plan|months"
+          const [tenantId, plan, months] = customId.split('|');
+
+          console.log(
+            `✅ Payment completed: tenant=${tenantId}, ` +
+            `plan=${plan}, months=${months}`
+          );
+
+          if (tenantId) {
+            const subscriptionLog = await (prisma as any).shopSubscriptionLog.findFirst({
+              where: {
+                tenant_id: Number(tenantId),
+                status: 'pending',
+              },
+              orderBy: { created_at: 'desc' },
+            });
+
+            if (subscriptionLog) {
+              const startDate = new Date();
+              const endDate = new Date();
+              endDate.setMonth(endDate.getMonth() + subscriptionLog.months);
+
+              await (prisma as any).shopSubscriptionLog.update({
+                where: { id: subscriptionLog.id },
+                data: {
+                  status: 'paid',
+                  payment_reference: resource?.id,
+                  paid_at: new Date(),
+                  start_date: startDate,
+                  end_date: endDate,
+                },
+              });
+
+              await prisma.tenant.update({
+                where: { id: Number(tenantId) },
+                data: {
+                  shop_enabled: true,
+                  shop_subscription_status: 'active',
+                  shop_subscription_start: startDate,
+                  shop_subscription_end: endDate,
+                  shop_subscription_plan: subscriptionLog.plan,
+                } as any,
+              });
+
+              console.log(
+                `✅ Webhook: تم تفعيل المتجر للمستأجر ${tenantId} ` +
+                `حتى ${endDate.toISOString()}`
+              );
+            }
+          }
+          break;
+        }
+
+        case 'PAYMENT.CAPTURE.DENIED': {
+          const customId = resource?.custom_id || '';
+          const [tenantId] = customId.split('|');
+
+          console.log(`❌ Payment denied: tenant=${tenantId}`);
+
+          if (tenantId) {
+            await (prisma as any).shopSubscriptionLog.updateMany({
+              where: {
+                tenant_id: Number(tenantId),
+                status: 'pending',
+              },
+              data: { status: 'failed' },
+            });
+          }
+          break;
+        }
+
+        case 'PAYMENT.CAPTURE.REFUNDED': {
+          const customId = resource?.custom_id || '';
+          const [tenantId] = customId.split('|');
+
+          console.log(`💸 Payment refunded: tenant=${tenantId}`);
+
+          if (tenantId) {
+            await (prisma as any).shopSubscriptionLog.updateMany({
+              where: {
+                tenant_id: Number(tenantId),
+                status: 'paid',
+              },
+              data: { status: 'refunded' },
+            });
+
+            await prisma.tenant.update({
+              where: { id: Number(tenantId) },
+              data: {
+                shop_enabled: false,
+                shop_subscription_status: 'refunded',
+              } as any,
+            });
+          }
+          break;
+        }
+
+        case 'CHECKOUT.ORDER.APPROVED': {
+          console.log(`✅ Order approved: ${resource?.id}`);
+          break;
+        }
+
+        default:
+          console.log(`ℹ️ Event ignored: ${eventType}`);
+      }
+
+      // ✅ رد سريع
+      return res.status(200).json({ received: true });
+
+    } catch (error: any) {
+      console.error('❌ Webhook error:', error);
+      // ✅ رجّع 200 لتجنب إعادة المحاولة
+      return res.status(200).json({
+        received: true,
+        error: error.message,
+      });
+    }
+  }
 }

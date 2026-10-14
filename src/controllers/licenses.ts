@@ -6,6 +6,9 @@ import { TenantsController } from './tenants';
 const prisma = new PrismaClient();
 
 export class LicensesController {
+  // ═══════════════════════════════════════════════════════
+  // ✅ GENERATE — توليد ترخيص جديد
+  // ═══════════════════════════════════════════════════════
   async generate(req: Request, res: Response) {
     try {
       const data = req.body;
@@ -39,13 +42,25 @@ export class LicensesController {
         can_manage_roles: data.can_manage_roles ?? false,
         can_view_audit_log: data.can_view_audit_log ?? false,
         
-        // ✅ ✅ ✅ حقول السيرفر الجديدة (عند إنشاء ترخيص جديد)
+        // ✅ حقول السيرفر (Cloudflare)
         is_primary_server: false,
         primary_server_url: null,
         primary_server_ip: null,
         primary_server_port: 5000,
         is_online: false,
         last_heartbeat: null,
+        
+        // ✅ ✅ ✅ حقول Nebula VPN
+        nebula_enabled: false,
+        nebula_lighthouse_ip: null,
+        nebula_lighthouse_port: 4242,
+        nebula_network: null,
+        nebula_public_ip: null,
+        nebula_last_sync: null,
+        
+        // ✅ ✅ ✅ حقول المتجر
+        shop_url: null,
+        shop_enabled: false,
       };
       
       // ✅ إنشاء المستأجر
@@ -53,12 +68,12 @@ export class LicensesController {
       const resWithTenant = {
         status: (code: number) => ({
           json: (result: any) => {
-            // ✅ إعادة النتيجة مع تنسيق LicenseResponse
             res.json({
               success: true,
               license_key: result.tenant?.license_key || result.license_key,
               tenant: result.tenant,
               admin_password: result.admin_password || 'admin123',
+              admin_username: result.admin_username,
               message: result.message || 'License generated successfully'
             });
           }
@@ -73,7 +88,9 @@ export class LicensesController {
     }
   }
 
-  // ✅ ✅ ✅ دالة validate - الأهم! (ترجع معلومات السيرفر)
+  // ═══════════════════════════════════════════════════════
+  // ✅ VALIDATE — التحقق من الترخيص (مع كل الحقول)
+  // ═══════════════════════════════════════════════════════
   async validate(req: Request, res: Response) {
     try {
       const { license_key } = req.params;
@@ -113,7 +130,7 @@ export class LicensesController {
         daysLeft = Math.ceil(diff / (1000 * 60 * 60 * 24));
       }
       
-      // ✅ ✅ ✅ إرجاع معلومات السيرفر مع الرد
+      // ✅ الرد الكامل
       res.json({
         valid: true,
         tenant: {
@@ -137,13 +154,25 @@ export class LicensesController {
           total_users: tenant.total_users,
           total_storage_used_mb: tenant.total_storage_used_mb,
           
-          // ✅ ✅ ✅ حقول السيرفر (الأساسية)
+          // ✅ حقول السيرفر (Cloudflare)
           is_primary_server: tenant.is_primary_server,
           primary_server_url: tenant.primary_server_url,
           primary_server_ip: tenant.primary_server_ip,
           primary_server_port: tenant.primary_server_port,
           is_online: tenant.is_online,
           last_heartbeat: tenant.last_heartbeat?.toISOString() || null,
+          
+          // ✅ ✅ ✅ حقول Nebula VPN
+          nebula_enabled: tenant.nebula_enabled,
+          nebula_lighthouse_ip: tenant.nebula_lighthouse_ip,
+          nebula_lighthouse_port: tenant.nebula_lighthouse_port,
+          nebula_network: tenant.nebula_network,
+          nebula_public_ip: tenant.nebula_public_ip,
+          nebula_last_sync: tenant.nebula_last_sync?.toISOString() || null,
+          
+          // ✅ ✅ ✅ حقول المتجر
+          shop_url: tenant.shop_url,
+          shop_enabled: tenant.shop_enabled,
           
           // ✅ صلاحيات الشركة
           can_manage_products: tenant.can_manage_products,
@@ -176,11 +205,13 @@ export class LicensesController {
     }
   }
 
+  // ═══════════════════════════════════════════════════════
+  // ✅ REGENERATE — إعادة توليد مفتاح
+  // ═══════════════════════════════════════════════════════
   async regenerate(req: Request, res: Response) {
     try {
       const { tenant_id } = req.params;
       
-      // ✅ Check if tenant exists
       const tenant = await prisma.tenant.findFirst({
         where: { id: Number(tenant_id), is_deleted: false }
       });
@@ -189,10 +220,8 @@ export class LicensesController {
         return res.status(404).json({ error: 'Tenant not found' });
       }
       
-      // ✅ Generate new license
       const licenseInfo = LicenseManager.generateLicenseKey(tenant.name);
       
-      // ✅ Update tenant
       const updated = await prisma.tenant.update({
         where: { id: Number(tenant_id) },
         data: { license_key: licenseInfo.license_key }

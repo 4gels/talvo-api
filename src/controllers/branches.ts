@@ -66,7 +66,18 @@ export class BranchesController {
         });
       }
 
-      // ✅ إنشاء الفرع
+      // ✅ ✅ ✅ حساب nebula_device_id و nebula_vpn_ip
+      // الجهاز الرئيسي = 1، الفروع تبدأ من 2
+      const existingBranches = await prisma.branch.count({
+        where: { 
+          tenant_id: Number(tenantId),
+          is_deleted: false
+        }
+      });
+      const nebula_device_id = existingBranches + 2;
+      const nebula_vpn_ip = `10.${tenantId}.0.${nebula_device_id}`;
+
+      // ✅ إنشاء الفرع (مع حقول Nebula)
       const branch = await prisma.branch.create({
         data: {
           tenant_id: Number(tenantId),
@@ -74,13 +85,29 @@ export class BranchesController {
           branch_name: branch_name.trim(),
           arabic_name: (arabic_name || branch_name).trim(),
           is_active: true,
-          is_online: false
+          is_online: false,
+          
+          // ✅ ✅ ✅ حقول Nebula
+          nebula_device_id,
+          nebula_vpn_ip,
+          nebula_cert_issued: false,
         }
       });
+
+      console.log(`✅ Branch created: ${branch.branch_name}`);
+      console.log(`   Code: ${branch.branch_code}`);
+      console.log(`   Nebula IP: ${branch.nebula_vpn_ip}`);
+      console.log(`   Device ID: ${branch.nebula_device_id}`);
 
       res.status(201).json({
         success: true,
         branch,
+        nebula: {
+          device_id: nebula_device_id,
+          vpn_ip: nebula_vpn_ip,
+          lighthouse_ip: tenant.nebula_lighthouse_ip || `10.${tenantId}.0.1`,
+          network: tenant.nebula_network || `10.${tenantId}.0.0/16`,
+        },
         message: `تم إنشاء الفرع ${branch.branch_name} بنجاح`
       });
 
@@ -177,7 +204,7 @@ export class BranchesController {
         }
       });
 
-      // ✅ الرد
+      // ✅ ✅ ✅ الرد الكامل (مع حقول Nebula)
       res.json({
         valid: true,
         branch: {
@@ -187,7 +214,12 @@ export class BranchesController {
           arabic_name: branch.arabic_name,
           tenant_id: branch.tenant_id,
           is_active: branch.is_active,
-          is_online: true
+          is_online: true,
+          
+          // ✅ حقول Nebula للفرع
+          nebula_device_id: branch.nebula_device_id,
+          nebula_vpn_ip: branch.nebula_vpn_ip,
+          nebula_cert_issued: branch.nebula_cert_issued,
         },
         tenant: {
           id: branch.tenant.id,
@@ -196,13 +228,22 @@ export class BranchesController {
           license_key: branch.tenant.license_key,
           db_name: branch.tenant.db_name,
           is_active: branch.tenant.is_active,
+          subscription_plan: branch.tenant.subscription_plan,
+          max_users: branch.tenant.max_users,
+          
+          // ✅ ✅ ✅ حقول Nebula للـ Master
+          nebula_enabled: branch.tenant.nebula_enabled,
+          nebula_lighthouse_ip: branch.tenant.nebula_lighthouse_ip,
+          nebula_lighthouse_port: branch.tenant.nebula_lighthouse_port,
+          nebula_network: branch.tenant.nebula_network,
+          nebula_public_ip: branch.tenant.nebula_public_ip,
+          
+          // ✅ ✅ ✅ حقول Cloudflare (fallback)
           is_primary_server: branch.tenant.is_primary_server,
           primary_server_url: branch.tenant.primary_server_url,
           primary_server_ip: branch.tenant.primary_server_ip,
           primary_server_port: branch.tenant.primary_server_port,
           is_online: branch.tenant.is_online,
-          subscription_plan: branch.tenant.subscription_plan,
-          max_users: branch.tenant.max_users
         }
       });
 
@@ -313,7 +354,6 @@ export class BranchesController {
         });
       }
 
-      // ✅ Soft delete
       await prisma.branch.update({
         where: { id: Number(id) },
         data: {
@@ -379,7 +419,7 @@ export class BranchesController {
   }
 
   /**
-   * ✅ Heartbeat للفرع
+   * ✅ Heartbeat للفرع (Cloudflare - fallback)
    * POST /api/v1/branches/:branch_code/heartbeat
    */
   async heartbeat(req: Request, res: Response) {
@@ -412,6 +452,170 @@ export class BranchesController {
 
     } catch (error) {
       console.error('Branch heartbeat error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to update heartbeat' 
+      });
+    }
+  }
+
+  /**
+   * ✅ ✅ ✅ الفرع يطلب شهادة Nebula
+   * POST /api/v1/branches/:branch_code/request-nebula-cert
+   */
+  async requestNebulaCert(req: Request, res: Response) {
+    try {
+      const { branch_code } = req.params;
+      
+      const branch = await prisma.branch.findFirst({
+        where: { 
+          branch_code, 
+          is_deleted: false, 
+          is_active: true 
+        },
+        include: { tenant: true }
+      });
+      
+      if (!branch) {
+        return res.status(404).json({ 
+          success: false,
+          error: 'Branch not found or inactive' 
+        });
+      }
+      
+      if (!branch.tenant) {
+        return res.status(404).json({ 
+          success: false,
+          error: 'Tenant not found' 
+        });
+      }
+      
+      // ✅ التحقق من تفعيل Nebula
+      if (!branch.tenant.nebula_enabled) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Nebula is not enabled for this tenant' 
+        });
+      }
+      
+      res.json({
+        success: true,
+        branch: {
+          id: branch.id,
+          tenant_id: branch.tenant_id,
+          branch_code: branch.branch_code,
+          branch_name: branch.branch_name,
+          arabic_name: branch.arabic_name,
+          nebula_device_id: branch.nebula_device_id,
+          nebula_vpn_ip: branch.nebula_vpn_ip,
+          nebula_cert_issued: branch.nebula_cert_issued,
+        },
+        tenant: {
+          id: branch.tenant.id,
+          name: branch.tenant.name,
+          nebula_enabled: branch.tenant.nebula_enabled,
+          nebula_lighthouse_ip: branch.tenant.nebula_lighthouse_ip,
+          nebula_lighthouse_port: branch.tenant.nebula_lighthouse_port,
+          nebula_network: branch.tenant.nebula_network,
+        }
+      });
+    } catch (error) {
+      console.error('Request Nebula cert error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to request cert' 
+      });
+    }
+  }
+
+  /**
+   * ✅ ✅ ✅ Master يؤكد إصدار الشهادة
+   * POST /api/v1/branches/:id/confirm-nebula-cert
+   */
+  async confirmNebulaCert(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { nebula_device_id, nebula_vpn_ip } = req.body;
+      
+      const branch = await prisma.branch.findFirst({
+        where: { id: Number(id), is_deleted: false }
+      });
+      
+      if (!branch) {
+        return res.status(404).json({ 
+          success: false,
+          error: 'Branch not found' 
+        });
+      }
+      
+      const updated = await prisma.branch.update({
+        where: { id: Number(id) },
+        data: {
+          nebula_device_id: nebula_device_id || branch.nebula_device_id,
+          nebula_vpn_ip: nebula_vpn_ip || branch.nebula_vpn_ip,
+          nebula_cert_issued: true,
+          nebula_cert_issued_at: new Date(),
+        }
+      });
+      
+      console.log(`✅ Nebula cert confirmed: ${branch.branch_name}`);
+      
+      res.json({
+        success: true,
+        message: 'تم تسجيل الشهادة بنجاح',
+        branch: updated
+      });
+    } catch (error) {
+      console.error('Confirm Nebula cert error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to confirm cert' 
+      });
+    }
+  }
+
+  /**
+   * ✅ ✅ ✅ نبضة Nebula للفرع
+   * POST /api/v1/branches/:branch_code/nebula-heartbeat
+   */
+  async nebulaHeartbeat(req: Request, res: Response) {
+    try {
+      const { branch_code } = req.params;
+      const { device_name, device_ip } = req.body;
+      
+      const branch = await prisma.branch.findFirst({
+        where: { branch_code, is_deleted: false }
+      });
+      
+      if (!branch) {
+        return res.status(404).json({ 
+          success: false,
+          error: 'Branch not found' 
+        });
+      }
+      
+      await prisma.branch.update({
+        where: { id: branch.id },
+        data: {
+          last_seen: new Date(),
+          is_online: true,
+          device_name: device_name || branch.device_name,
+          device_ip: device_ip || branch.device_ip,
+        }
+      });
+      
+      res.json({
+        success: true,
+        message: 'Nebula heartbeat received',
+        branch: {
+          id: branch.id,
+          branch_code: branch.branch_code,
+          is_online: true,
+          last_seen: new Date(),
+        }
+      });
+    } catch (error) {
+      console.error('Nebula heartbeat error:', error);
       res.status(500).json({ 
         success: false,
         error: 'Failed to update heartbeat' 

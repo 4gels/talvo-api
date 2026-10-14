@@ -7,6 +7,7 @@ import licensesRoutes from './routes/licenses';
 import authRoutes from './routes/auth';
 import statsRoutes from './routes/stats';
 import branchesRoutes from './routes/branches';  // ✅ جديد
+import shopSubscriptionRoutes from './routes/shop-subscription';
 
 
 dotenv.config();
@@ -23,6 +24,7 @@ app.use('/api/v1/licenses', licensesRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/stats', statsRoutes);
 app.use('/api/v1/branches', branchesRoutes);
+app.use('/api/v1/shop-subscription', shopSubscriptionRoutes);
 
 // ✅ Health Check
 app.get('/health', (req, res) => {

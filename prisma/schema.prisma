@@ -94,6 +94,7 @@ model Tenant {
   sales_return_items SalesReturnItem[]
   purchase_returns PurchaseReturn[]
   purchase_return_items PurchaseReturnItem[]
+  shop_subscriptions  ShopSubscriptionLog[]
 
   is_primary_server     Boolean  @default(false)
   primary_server_url    String?  @db.VarChar(500)
@@ -101,6 +102,23 @@ model Tenant {
   primary_server_port   Int      @default(5000)
   is_online             Boolean  @default(false)
   last_heartbeat        DateTime?
+
+  // ✅ ✅ ✅ حقول Nebula (جديدة)
+  nebula_enabled           Boolean   @default(false)
+  nebula_lighthouse_ip     String?   @db.VarChar(45)
+  nebula_lighthouse_port   Int       @default(4242)
+  nebula_network           String?   @db.VarChar(20)
+  nebula_public_ip         String?   @db.VarChar(45)
+  nebula_last_sync         DateTime?
+
+  // ✅ ✅ ✅ حقول المتجر الإلكتروني (جديدة)
+  shop_url                 String?   @db.VarChar(500)
+  shop_enabled             Boolean   @default(false)
+
+  shop_subscription_status String?   @default("none") @db.VarChar(20)
+  shop_subscription_start  DateTime?
+  shop_subscription_end    DateTime?
+  shop_subscription_plan   String?   @db.VarChar(20)
 
   // sync_queues, data_sync_queues, sync_conflicts تم إزالتها لأنها غير مرتبطة مباشرة بـ Tenant
   @@map("tenants")
@@ -139,6 +157,13 @@ model Branch {
   // ✅ إحصائيات
   total_users           Int      @default(0)
   
+  // ✅ ✅ ✅ حقول Nebula للفرع
+  nebula_device_id          Int?
+  nebula_vpn_ip             String?  @db.VarChar(45)
+  nebula_cert_issued        Boolean  @default(false)
+  nebula_cert_issued_at     DateTime?
+  nebula_join_password_hash String?  @db.VarChar(255)
+
   // ✅ Sync fields
   sync_id               String   @unique @default(cuid())
   is_deleted            Boolean  @default(false)
@@ -1758,4 +1783,31 @@ model SyncConflict {
   resolver User? @relation("ResolvedConflicts", fields: [resolved_by], references: [id])
   // ✅ العلاقات
   @@map("sync_conflicts")
+}
+
+model ShopSubscriptionLog {
+  id                    Int      @id @default(autoincrement())
+  tenant_id             Int
+  plan                  String   @db.VarChar(20)
+  months                Int
+  amount                Decimal  @db.Decimal(15, 2)
+  currency              String   @default("EGP") @db.VarChar(3)
+  
+  status                String   @default("pending") @db.VarChar(20)
+  // pending | paid | failed | refunded
+  
+  payment_url           String?  @db.Text
+  payment_reference     String?  @db.VarChar(100)
+  payment_method        String?  @db.VarChar(30)
+  
+  start_date            DateTime?
+  end_date              DateTime?
+  paid_at               DateTime?
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  
+  tenant                Tenant   @relation(fields: [tenant_id], references: [id])
+  
+  @@map("shop_subscription_logs")
 }

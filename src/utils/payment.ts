@@ -253,9 +253,10 @@ export async function createPaymentSession(
       },
     ],
     application_context: {
-      brand_name: 'Talvo Shop',
+      brand_name: 'Talvo',
       locale: 'ar-EG',
-      landing_page: 'LOGIN',
+      landing_page: 'BILLING',
+      logo_url: 'https://avatars.githubusercontent.com/u/337130551?s=190&v=4',
       shipping_preference: 'NO_SHIPPING',
       user_action: 'PAY_NOW',
       return_url: `${params.callback_url}/success?ref=${params.reference}`,

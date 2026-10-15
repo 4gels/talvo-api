@@ -646,20 +646,30 @@ export class TenantsController {
         months: Number(months),
       });
 
+      // ✅ ✅ ✅ استخدم صفحتنا الخاصة بدل PayPal
+      const paypalOrderId = session.provider_reference;
+      const amountUsd = (session as any).amount_usd || finalAmount;
+      
+      const ownPaymentUrl =
+        `${process.env.TALVO_API_URL}/api/v1/checkout/pay/` +
+        `${paypalOrderId}?ref=${subscriptionLog.id}&amount=${amountUsd.toFixed(2)}`;
+
       await (prisma as any).shopSubscriptionLog.update({
         where: { id: subscriptionLog.id },
         data: {
-          payment_url: session.payment_url,
-          payment_reference: session.provider_reference,
-          payment_method: session.provider,
+          payment_url: ownPaymentUrl,           // ← صفحتنا
+          payment_reference: paypalOrderId,
+          payment_method: 'paypal',
         }
       });
 
       res.json({
         success: true,
         subscription_id: subscriptionLog.id,
-        payment_url: session.payment_url,
+        payment_url: ownPaymentUrl,             // ← صفحتنا
+        paypal_order_id: paypalOrderId,
         amount: finalAmount,
+        amount_usd: amountUsd,
         message: 'اتبع رابط الدفع',
       });
 

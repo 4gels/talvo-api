@@ -122,6 +122,7 @@ export class TenantsController {
           // ✅ ✅ ✅ حقول المتجر
           shop_url: data.shop_url ?? null,
           shop_enabled: data.shop_enabled ?? false,
+          shop_slug: data.shop_slug ?? null,
         }
       });
       
@@ -230,6 +231,7 @@ export class TenantsController {
           // ✅ ✅ ✅ حقول المتجر
           shop_url: data.shop_url ?? tenant.shop_url,
           shop_enabled: data.shop_enabled ?? tenant.shop_enabled,
+          shop_slug: data.shop_slug ?? tenant.shop_slug,
         }
       });
       
@@ -979,6 +981,142 @@ export class TenantsController {
         received: true,
         error: error.message,
       });
+    }
+  }
+
+    // ═══════════════════════════════════════════════════════
+  // ✅ ✅ ✅ RESOLVE — قبول tenant_id أو shop_slug
+  // ═══════════════════════════════════════════════════════
+  async resolve(req: Request, res: Response) {
+    try {
+      const { identifier } = req.params;
+      
+      if (!identifier) {
+        return res.status(400).json({ success: false, error: 'Missing identifier' });
+      }
+
+      // ✅ هل identifier رقم؟
+      const isNumeric = /^\d+$/.test(identifier);
+      
+      let tenant;
+      if (isNumeric) {
+        tenant = await prisma.tenant.findFirst({
+          where: { id: Number(identifier), is_deleted: false }
+        });
+      } else {
+        tenant = await prisma.tenant.findFirst({
+          where: { shop_slug: identifier, is_deleted: false }
+        });
+      }
+      
+      if (!tenant) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Shop not found' 
+        });
+      }
+      
+      if (!tenant.is_active) {
+        return res.status(403).json({ 
+          success: false, 
+          error: 'Tenant is not active' 
+        });
+      }
+      
+      if (!tenant.shop_enabled) {
+        return res.status(403).json({ 
+          success: false, 
+          error: 'Shop is not enabled for this tenant' 
+        });
+      }
+      
+      if (!tenant.shop_url) {
+        return res.status(503).json({ 
+          success: false, 
+          error: 'Shop URL is not ready yet. Please try again later.' 
+        });
+      }
+      
+      res.json({
+        success: true,
+        tenant_id: tenant.id,
+        tenant_name: tenant.name,
+        tenant_arabic_name: tenant.arabic_name,
+        shop_slug: tenant.shop_slug,
+        shop_url: tenant.shop_url,
+        shop_enabled: tenant.shop_enabled,
+        currency: tenant.currency,
+        timezone: tenant.timezone,
+        logo_path: tenant.logo_path,
+      });
+    } catch (error) {
+      console.error('Resolve tenant error:', error);
+      res.status(500).json({ success: false, error: 'Failed to resolve tenant' });
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // ✅ ✅ ✅ CHECK SLUG — هل الـ slug متاح؟
+  // ═══════════════════════════════════════════════════════
+  async checkSlugAvailability(req: Request, res: Response) {
+    try {
+      const { slug } = req.params;
+      
+      if (!slug || slug.length < 3) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Slug must be at least 3 characters',
+          available: false
+        });
+      }
+      
+      if (slug.length > 50) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Slug must be at most 50 characters',
+          available: false
+        });
+      }
+      
+      if (!/^[a-z0-9-]+$/.test(slug)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Slug must contain only lowercase letters, numbers, and hyphens',
+          available: false
+        });
+      }
+      
+      // ✅ محجوزات
+      const reservedSlugs = [
+        'login', 'register', 'cart', 'checkout', 'account', 
+        'orders', 'products', 'search', 'admin', 'api', 
+        'shop', 'store', 'p', 'product', 'category', 'about',
+        'help', 'support', 'contact', 'terms', 'privacy'
+      ];
+      
+      if (reservedSlugs.includes(slug)) {
+        return res.json({ 
+          success: true, 
+          available: false,
+          reason: 'Slug is reserved'
+        });
+      }
+      
+      const existing = await prisma.tenant.findFirst({
+        where: { 
+          shop_slug: slug, 
+          is_deleted: false 
+        }
+      });
+      
+      res.json({
+        success: true,
+        available: !existing,
+        reason: existing ? 'Slug already taken' : 'Available'
+      });
+    } catch (error) {
+      console.error('Check slug error:', error);
+      res.status(500).json({ success: false, error: 'Failed to check slug' });
     }
   }
 }

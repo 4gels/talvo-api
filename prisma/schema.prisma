@@ -114,7 +114,7 @@ model Tenant {
   // ✅ ✅ ✅ حقول المتجر الإلكتروني (جديدة)
   shop_url                 String?   @db.VarChar(500)
   shop_enabled             Boolean   @default(false)
-
+  shop_slug                String?   @unique @db.VarChar(50)
   shop_subscription_status String?   @default("none") @db.VarChar(20)
   shop_subscription_start  DateTime?
   shop_subscription_end    DateTime?

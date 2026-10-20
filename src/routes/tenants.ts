@@ -67,6 +67,20 @@ router.post('/:id/save-shop-url', authMiddleware, (req: Request, res: Response) 
   tenantsController.saveShopUrl(req, res)
 );
 
+// ═══════════════════════════════════════════════════════
+// ✅ ✅ ✅ Public Routes (بدون auth) — للموقع
+// ═══════════════════════════════════════════════════════
+
+// ✅ Resolve — قبول tenant_id أو shop_slug
+router.get('/resolve/:identifier', (req: Request, res: Response) => 
+  tenantsController.resolve(req, res)
+);
+
+// ✅ Check slug availability
+router.get('/check-slug/:slug', (req: Request, res: Response) => 
+  tenantsController.checkSlugAvailability(req, res)
+);
+
 // ✅ معلومات المتجر (عام - بدون auth - يستعلم من الموقع الموحّد)
 router.get('/:id/shop-info', (req: Request, res: Response) => 
   tenantsController.getShopInfo(req, res)
